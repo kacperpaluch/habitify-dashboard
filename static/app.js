@@ -16,6 +16,8 @@ const parseDate = (s) => new Date(`${s}T12:00:00`);
 const fmtNumber = new Intl.NumberFormat("pl-PL", { maximumFractionDigits: 1 });
 const months = ["sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "lis", "gru"];
 const weekdays = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
+const plural = (n, one, few, many) =>
+  n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many;
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (ch) => ({
@@ -106,6 +108,7 @@ function render(data) {
   $("#metricPerfect").textContent = fmtNumber.format(s.perfect_days);
   $("#metricRateSub").textContent = `${s.records} zapisanych okresów`;
   $("#dataRange").textContent = state.start && state.end ? `${state.start} — ${state.end}` : "Cały okres";
+  renderToday(data.analytics?.today);
   renderHeatmap(data.heatmap);
   renderHabits(data.habits);
   renderAnalytics(data.analytics);
@@ -137,7 +140,6 @@ function renderAnalytics(analytics) {
   renderBars("#listBars", analytics.lists.map((x) => ({ name: x.name, rate: x.rate, meta: `${x.done}/${x.total}` })));
   renderMonthly(analytics.monthly);
   renderHabitInsights(analytics);
-  renderAtRisk(analytics.at_risk);
   renderRecords(analytics.goal_metrics);
   renderCorrelations(analytics.correlations);
   renderQuality(analytics.data_quality);
@@ -173,9 +175,30 @@ function renderHabitInsights(analytics) {
     <div class="insight-item"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.name)}${item.reliable ? "" : " · mała próba"}</small></span><span class="insight-value ${String(item.value).startsWith("+") ? "positive" : String(item.value).startsWith("-") ? "negative" : ""}">${escapeHtml(item.value)}</span></div>`).join("") : "<p class='hint'>Potrzeba danych z co najmniej dwóch okresów porównawczych.</p>";
 }
 
-function renderAtRisk(items) {
-  $("#atRiskList").innerHTML = items.length ? items.map((item) => `
-    <div class="insight-item"><span><strong>${escapeHtml(item.name)}</strong><small>${fmtNumber.format(item.quantity)} / ${fmtNumber.format(item.goal)} ${escapeHtml(item.value_unit)}</small></span><span class="insight-value">${item.streak} ${item.unit === "week" ? "tyg." : "dni"}</span></div>`).join("") : "<p class='hint positive'>Żaden aktywny streak nie jest obecnie zagrożony.</p>";
+function renderToday(today) {
+  if (!today) return;
+  const left = today.pending.length;
+  $("#todayVerdict").textContent = !today.total
+    ? "Brak nawyków na dziś"
+    : left === 0
+      ? "Komplet — wszystko odhaczone"
+      : `${left} ${plural(left, "nawyk został", "nawyki zostały", "nawyków zostało")} do zrobienia`;
+  $("#todayMeta").textContent = today.total ? `${today.done} z ${today.total} wykonane · ${today.date}` : "";
+  $("#todayList").innerHTML = left ? today.pending.map((item) => {
+    const periods = (n) => item.unit === "week"
+      ? plural(n, "tydzień", "tygodnie", "tygodni")
+      : plural(n, "dzień", "dni", "dni");
+    const stake = item.streak > 0
+      ? `tracisz serię ${item.streak} ${periods(item.streak)}`
+      : item.missed > 0
+        ? `${item.missed} ${periods(item.missed)} z rzędu bez wykonania`
+        : "jeszcze nie zaczęte";
+    const progress = item.goal > 0
+      ? `${fmtNumber.format(item.quantity)} / ${fmtNumber.format(item.goal)} ${escapeHtml(item.value_unit)}`
+      : `limit 0 · odnotowano ${fmtNumber.format(item.quantity)} ${escapeHtml(item.value_unit)}`;
+    const tone = item.streak > 0 ? " streak" : item.missed > 0 ? " cold" : "";
+    return `<div class="today-row${tone}"><span><strong>${escapeHtml(item.name)}</strong><small>${progress}</small></span><span class="stake">${stake}</span></div>`;
+  }).join("") : `<p class="today-clear">${today.total ? "Wszystkie dzisiejsze cele zaliczone." : "Habitify nie zwrócił nawyków zaplanowanych na dziś."}</p>`;
 }
 
 function renderRecords(items) {

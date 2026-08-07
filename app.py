@@ -123,7 +123,6 @@ def init_db() -> None:
                 unit TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL,
                 list_name TEXT NOT NULL DEFAULT '',
-                note TEXT NOT NULL DEFAULT '',
                 sync_id INTEGER NOT NULL REFERENCES sync_runs(id),
                 PRIMARY KEY (date, habit_id, period)
             );
@@ -320,11 +319,11 @@ def sync_habitify(full: bool = False, today: date | None = None) -> dict:
                     updated += int(key in existing_keys)
                     conn.execute(
                         """INSERT INTO records
-                        (date,habit_id,name,description,archived,period,habit_type,goal,quantity,unit,status,list_name,note,sync_id)
-                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (date,habit_id,name,description,archived,period,habit_type,goal,quantity,unit,status,list_name,sync_id)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (record["date"], habit["id"], habit["name"], habit["description"], habit["archived"],
                          habit["period"], habit["habit_type"], habit["goal"], record["quantity"], habit["unit"],
-                         record["status"], habit["list_name"], "", sync_id),
+                         record["status"], habit["list_name"], sync_id),
                     )
                 total += len(records)
             if seen_ids:
@@ -549,7 +548,7 @@ def correlations(rows: list[dict]) -> list[dict]:
     return sorted(result, key=lambda x: (not x["reliable"], -(abs(x["correlation"]) if x["correlation"] is not None else 0), -x["observations"]))[:12]
 
 
-def extended_analytics(rows: list[dict], previous_rows: list[dict], params: dict[str, list[str]], today: date) -> dict:
+def extended_analytics(rows: list[dict], previous_rows: list[dict], all_by_name: dict[str, list[dict]], today: date) -> dict:
     current_rate, previous_rate = rate_of(rows), rate_of(previous_rows)
     daily_series = period_series(rows, "Daily")
     weekly_series = period_series(rows, "Weekly")
@@ -607,26 +606,35 @@ def extended_analytics(rows: list[dict], previous_rows: list[dict], params: dict
         monthly.append({"month": month, "rate": rate_of(items), "records": len(items),
                         "perfect_days": sum(all(is_complete(r) for r in day) for day in day_groups.values())})
 
-    scoped_params = {key: list(value) for key, value in params.items() if key not in {"start", "end"}}
-    all_scoped = query_records(scoped_params)
-    all_by_name: dict[str, list[dict]] = defaultdict(list)
-    for row in all_scoped: all_by_name[row["name"]].append(row)
-    at_risk, quality, behaviors, records_data = [], [], [], []
-    current_key_daily = today
-    current_key_weekly = today - timedelta(days=today.weekday())
+    quality, behaviors, records_data, pending = [], [], [], []
+    today_done = today_total = 0
     for name, items in all_by_name.items():
         current_streak, longest, unit = streaks(items, today)
-        latest_by_key = {period_key(date.fromisoformat(r["date"]), r["period"]): r for r in items}
-        expected_key = current_key_weekly if items[0]["period"].lower() == "weekly" else current_key_daily
-        current_row = latest_by_key.get(expected_key)
-        if current_row and not is_complete(current_row) and current_streak > 0:
-            at_risk.append({"name": name, "streak": current_streak, "unit": unit,
-                            "quantity": current_row["quantity"], "goal": current_row["goal"], "value_unit": current_row["unit"]})
+        period = items[0]["period"]
+        step = timedelta(weeks=1) if period.lower() == "weekly" else timedelta(days=1)
+        by_key = {period_key(date.fromisoformat(r["date"]), r["period"]): r for r in items}
+        current_key = period_key(today, period)
+        current_row = by_key.get(current_key)
+        if current_row:
+            today_total += 1
+            if is_complete(current_row):
+                today_done += 1
+            else:
+                # Every open period counts, streak or not: a habit already slipping
+                # is exactly the one worth surfacing, and the old streak>0 guard hid it.
+                cursor, missed = current_key - step, 0
+                while cursor in by_key and not is_complete(by_key[cursor]):
+                    missed += 1
+                    cursor -= step
+                pending.append({"name": name, "period": period, "streak": current_streak,
+                                "unit": unit, "missed": missed, "quantity": current_row["quantity"],
+                                "goal": current_row["goal"], "value_unit": current_row["unit"]})
         selected_items = current_by_name.get(name, [])
         if selected_items:
             behaviors.append({"name": name, **habit_behavior(selected_items)})
             records_data.append({"name": name, **goal_metrics(selected_items)})
-        quality.append({"name": name, "period": items[0]["period"], **coverage_metrics(items)})
+        quality.append({"name": name, "period": period, **coverage_metrics(items)})
+    pending.sort(key=lambda item: (-item["streak"], -item["missed"], item["name"].lower()))
 
     with connect() as conn:
         latest_sync = conn.execute(
@@ -646,18 +654,25 @@ def extended_analytics(rows: list[dict], previous_rows: list[dict], params: dict
         "regularity": {"weekly_stddev": regularity_sd, "weeks": len(week_rates)},
         "habit_changes": changes, "most_improved": improved, "most_regressed": regressed,
         "lists": lists, "monthly": monthly, "behaviors": behaviors,
-        "goal_metrics": records_data, "at_risk": at_risk, "correlations": correlations(rows),
+        "goal_metrics": records_data, "correlations": correlations(rows),
+        "today": {"date": today.isoformat(), "done": today_done,
+                  "total": today_total, "pending": pending},
         "data_quality": {"latest_sync": dict(latest_sync) if latest_sync else None,
                          "habits": quality, "coverage_warning": coverage_warning,
                          "current_records": current_count, "previous_records": previous_count},
     }
 
 
-def dashboard(params: dict[str, list[str]]) -> dict:
+def dashboard(params: dict[str, list[str]], today: date | None = None) -> dict:
     rows = query_records(params)
-    today = date.today()
+    today = today or date.today()
     previous_params, previous_start, previous_end = previous_period_params(params, rows)
     previous_rows = query_records(previous_params) if previous_start else []
+    # One un-dated read backs both streaks and analytics; the per-habit lookups
+    # this replaces meant a full table scan for every habit on screen.
+    all_by_name: dict[str, list[dict]] = defaultdict(list)
+    for row in query_records({k: v for k, v in params.items() if k not in {"start", "end"}}):
+        all_by_name[row["name"]].append(row)
     grouped: dict[str, list[dict]] = defaultdict(list)
     days: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
@@ -667,8 +682,7 @@ def dashboard(params: dict[str, list[str]]) -> dict:
 
     habit_stats = []
     for name, items in grouped.items():
-        all_items = all_rows_for_habit(name)
-        current, longest, unit = streaks(all_items, today)
+        current, longest, unit = streaks(all_by_name[name], today)
         done = sum(is_complete(r) for r in items)
         quantities = [r["quantity"] for r in items]
         habit_stats.append({
@@ -694,7 +708,7 @@ def dashboard(params: dict[str, list[str]]) -> dict:
         options = conn.execute(
             "SELECT DISTINCT name, list_name, period FROM records ORDER BY name"
         ).fetchall()
-    analytics = extended_analytics(rows, previous_rows, params, today)
+    analytics = extended_analytics(rows, previous_rows, all_by_name, today)
     analytics["comparison"]["previous_start"] = previous_start
     analytics["comparison"]["previous_end"] = previous_end
     return {

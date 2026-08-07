@@ -6,10 +6,12 @@ Self-hostowany dashboard analityczny dla danych z Habitify. Habitify jest jedyny
 
 ## Funkcje
 
+- panel **Dziś** na starcie: co zostało do zrobienia i co jest na szali,
 - automatyczna synchronizacja z Habitify co 30 minut,
 - ręczna i pełna synchronizacja z interfejsu,
 - dzienne i tygodniowe cele z poprawnym przeliczaniem jednostek,
 - heatmapa, skuteczność, streaki, trendy 7/30 i porównania okresów,
+- reszta analityki zwinięta w sekcji „Analiza historyczna",
 - stabilne identyfikatory Habitify — zmiana nazwy nie rozdziela historii,
 - brak zależności runtime poza biblioteką standardową Pythona.
 

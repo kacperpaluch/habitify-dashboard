@@ -39,10 +39,12 @@ auto_sync_loop / POST /api/sync
     → jedna transakcja SQLite
 
 GET /api/dashboard
-  → query_records
+  → query_records (zakres + zakres poprzedni + zakres bez dat)
   → agregaty i extended_analytics
   → static/app.js
 ```
+
+`dashboard` wykonuje trzy odczyty `records` niezależnie od liczby nawyków. Zapytanie bez filtra dat zasila zarówno streaki, jak i `extended_analytics`; nie wolno wracać do odpytywania per nawyk.
 
 `SYNC_LOCK` zapobiega równoległym synchronizacjom z przycisku i wątku automatycznego. Każdy wątek otwiera osobne połączenie SQLite.
 
@@ -50,7 +52,7 @@ GET /api/dashboard
 
 - `sync_runs`: czas, status, full/incremental, liczniki zmian i komunikat błędu.
 - `habits`: aktualna konfiguracja, klucz główny równy stabilnemu ID Habitify.
-- `records`: klucz `(date, habit_id, period)` i zdenormalizowane metadane nawyku.
+- `records`: klucz `(date, habit_id, period)` i zdenormalizowane metadane nawyku. Bazy sprzed usunięcia kolumny `note` zachowują ją jako szczątkową; `DEFAULT ''` sprawia, że INSERT bez niej działa w obu schematach i migracja nie jest potrzebna.
 
 Rename aktualizuje wszystkie rekordy danego `habit_id`. Rekord dzienny oznacza dzień, a tygodniowy cały tydzień ISO i używa daty poniedziałku.
 
@@ -100,6 +102,7 @@ Filtry dashboardu: `start`, `end`, `habit`, `list`, `period`.
 - `Complete` jest jedynym statusem sukcesu.
 - Nie mieszać Daily i Weekly w trendach ani streakach.
 - Bieżący nieukończony dzień lub tydzień ma grace period.
+- `analytics.today` obejmuje **każdy** otwarty okres, także przy streaku 0; nawyk, który już się sypie, jest najważniejszy do pokazania. Brak rekordu na bieżący okres oznacza „nie zaplanowano" i nie trafia do `pending`.
 - Heatmapa korzysta tylko z rekordów Daily.
 - Cel `Breaking=0` nie może być dzielnikiem.
 - Współwystępowanie nie oznacza przyczynowości; wiarygodność od 30 wspólnych dni.

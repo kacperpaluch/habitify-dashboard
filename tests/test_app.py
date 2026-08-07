@@ -76,7 +76,7 @@ class HabitLensTests(unittest.TestCase):
 
     def test_dashboard_and_streaks_use_habitify_records(self):
         self.sync(full=True)
-        result = app.dashboard({"start": ["2026-08-03"], "end": ["2026-08-04"]})
+        result = app.dashboard({"start": ["2026-08-03"], "end": ["2026-08-04"]}, today=date(2026, 8, 4))
         self.assertEqual(result["summary"]["records"], 4)
         self.assertEqual(result["summary"]["done"], 2)
         self.assertEqual(result["summary"]["rate"], 50.0)
@@ -107,6 +107,17 @@ class HabitLensTests(unittest.TestCase):
         self.assertIsNone(old_table)
         self.assertEqual(version, 2)
         self.assertEqual(records, 0)
+
+    def test_today_lists_pending_habits_without_a_streak(self):
+        # Regression: a habit missed yesterday too has streak 0 and used to be hidden.
+        self.stats["fiber"]["data"]["dailyProgress"][0].update(totalLog=0.001, status="failed")
+        self.sync(full=True)
+        today = app.dashboard({"start": ["2026-08-03"], "end": ["2026-08-04"]}, today=date(2026, 8, 4))["analytics"]["today"]
+        pending = {item["name"]: item for item in today["pending"]}
+        self.assertEqual(pending["Błonnik"]["streak"], 0)
+        self.assertEqual(pending["Błonnik"]["missed"], 1)
+        self.assertIn("Ćwiczenia", pending)
+        self.assertEqual((today["done"], today["total"]), (0, 2))
 
     def test_behavior_goal_and_coverage_metrics(self):
         rows = [
