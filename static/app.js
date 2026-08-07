@@ -176,7 +176,11 @@ function renderHabitInsights(analytics) {
 }
 
 function renderToday(today) {
-  if (!today) return;
+  if (!today?.pending) {
+    $("#todayVerdict").textContent = "Brak danych o dziś";
+    $("#todayMeta").textContent = "Odśwież stronę — backend i interfejs mogą być z różnych wersji.";
+    return;
+  }
   const left = today.pending.length;
   $("#todayVerdict").textContent = !today.total
     ? "Brak nawyków na dziś"
