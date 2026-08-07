@@ -1,0 +1,28 @@
+# Sekrety i lokalna konfiguracja
+.env
+.env.*
+!.env.example
+
+# Dane runtime
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+htmlcov/
+coverage.xml
+.coverage
+
+# Edytory, system i pliki tymczasowe
+.DS_Store
+.idea/
+.vscode/
+*.log
+*.tmp

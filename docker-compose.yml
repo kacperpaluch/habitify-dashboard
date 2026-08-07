@@ -1,0 +1,16 @@
+services:
+  habitify-dashboard:
+    image: kpa90/habitify-dashboard:latest
+    container_name: habitify-dashboard
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      TZ: ${TZ:-Europe/Warsaw}
+      HABITIFY_API_KEY: ${HABITIFY_API_KEY:?Ustaw HABITIFY_API_KEY w zmiennych stosu Portainer}
+      SYNC_INTERVAL_MINUTES: ${SYNC_INTERVAL_MINUTES:-30}
+    volumes:
+      - habitify-dashboard-data:/app/data
+
+volumes:
+  habitify-dashboard-data:
