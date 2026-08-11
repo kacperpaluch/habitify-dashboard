@@ -23,6 +23,9 @@ Założenia:
 | `HABITIFY_TIMEOUT` | `30` | timeout requestu w sekundach |
 | `SYNC_INTERVAL_MINUTES` | `30` | okres synchronizacji; `0` wyłącza automat |
 | `SYNC_OVERLAP_DAYS` | `8` | nakładka synchronizacji przyrostowej |
+| `BACKUP_TIME` | `03:00` | godzina codziennego backupu według `TZ` |
+| `BACKUP_KEEP` | `14` | liczba zachowywanych kopii |
+| `MAX_BACKUP_MB` | `100` | limit uploadu bazy do restore |
 | `DB_PATH` | `data/habits.db` | ścieżka SQLite |
 | `HOST` / `PORT` | `0.0.0.0` / `8080` | serwer HTTP |
 
@@ -47,6 +50,8 @@ GET /api/dashboard
 `dashboard` wykonuje trzy odczyty `records` niezależnie od liczby nawyków. Zapytanie bez filtra dat zasila zarówno streaki, jak i `extended_analytics`; nie wolno wracać do odpytywania per nawyk.
 
 `SYNC_LOCK` zapobiega równoległym synchronizacjom z przycisku i wątku automatycznego. Każdy wątek otwiera osobne połączenie SQLite.
+
+Niezależny `backup_loop` sprawdza harmonogram co minutę. Po `BACKUP_TIME` tworzy najwyżej jeden backup `scheduled` danego dnia, o ile istnieją rekordy. Kopia korzysta z online backup API SQLite i przechodzi kontrolę nagłówka, `PRAGMA integrity_check`, schematu oraz SHA-256. Restore tworzy najpierw kopię `pre-restore`; pliki są przechowywane w `/app/data/backup`.
 
 ## Schemat v2
 
@@ -94,6 +99,11 @@ Sieć jest odpytywana przed transakcją zapisu. Dopiero komplet poprawnych odpow
 - `GET /api/habits/{name}`
 - `GET /api/syncs`
 - `POST /api/sync[?full=1]`
+- `GET /api/backups`
+- `POST /api/backup`
+- `GET /api/backups/{file}/download`
+- `POST /api/backups/{file}/restore`
+- `POST /api/backups/restore-upload`
 
 Filtry dashboardu: `start`, `end`, `habit`, `list`, `period`.
 
@@ -106,7 +116,7 @@ Filtry dashboardu: `start`, `end`, `habit`, `list`, `period`.
 - Heatmapa korzysta tylko z rekordów Daily.
 - Cel `Breaking=0` nie może być dzielnikiem.
 - Współwystępowanie nie oznacza przyczynowości; wiarygodność od 30 wspólnych dni.
-- `inprogress` bieżącego dnia jest otwartym, jeszcze nieukończonym wynikiem.
+- `inprogress` bieżącego dnia lub tygodnia jest stanem `in_progress`: nie zwiększa licznika porażek ani mianownika skuteczności, dopóki okres się nie zakończy.
 
 ## Weryfikacja
 

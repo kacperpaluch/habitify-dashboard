@@ -10,7 +10,9 @@ Self-hostowany dashboard analityczny dla danych z Habitify. Habitify jest jedyny
 - automatyczna synchronizacja z Habitify co 30 minut,
 - ręczna i pełna synchronizacja z interfejsu,
 - dzienne i tygodniowe cele z poprawnym przeliczaniem jednostek,
+- bieżący dzień i tydzień jako „w trakcie”, bez zaniżania skuteczności,
 - heatmapa, skuteczność, streaki, trendy 7/30 i porównania okresów,
+- codzienny backup o wybranej godzinie, kopia na żądanie i bezpieczne przywracanie,
 - reszta analityki zwinięta w sekcji „Analiza historyczna",
 - stabilne identyfikatory Habitify — zmiana nazwy nie rozdziela historii,
 - brak zależności runtime poza biblioteką standardową Pythona.
@@ -23,6 +25,7 @@ Utwórz `.env` na podstawie `.env.example`:
 HABITIFY_API_KEY=hb_...
 APP_PORT=8080
 SYNC_INTERVAL_MINUTES=30
+BACKUP_TIME=03:00
 TZ=Europe/Warsaw
 ```
 
@@ -44,7 +47,7 @@ Dashboard: <http://localhost:8080>
 
 1. Utwórz nowy Stack i wklej zawartość `docker-compose.yml`.
 2. W sekcji **Environment variables** ustaw co najmniej `HABITIFY_API_KEY`.
-3. Opcjonalnie ustaw `APP_PORT`, `SYNC_INTERVAL_MINUTES` i `TZ`.
+3. Opcjonalnie ustaw `APP_PORT`, `SYNC_INTERVAL_MINUTES`, `BACKUP_TIME`, `BACKUP_KEEP` i `TZ`.
 4. Wdróż Stack. Dane SQLite pozostaną w named volume `habitify-dashboard-data`.
 
 Compose domyślnie używa tagu `latest`. Do rollbacku ustaw w polu `image` konkretny tag wersji podany przy wydaniu.
@@ -81,6 +84,17 @@ API aplikacji:
 | `GET` | `/api/syncs` | 20 ostatnich synchronizacji |
 | `POST` | `/api/sync` | synchronizacja przyrostowa |
 | `POST` | `/api/sync?full=1` | pełna synchronizacja |
+| `GET` | `/api/backups` | status i lista zweryfikowanych kopii |
+| `POST` | `/api/backup` | backup na żądanie |
+| `GET` | `/api/backups/{file}/download` | pobranie kopii |
+| `POST` | `/api/backups/{file}/restore` | przywrócenie kopii serwerowej |
+| `POST` | `/api/backups/restore-upload` | przywrócenie przesłanego pliku `.db` |
+
+## Backup i przywracanie
+
+Aplikacja tworzy najwyżej jeden automatyczny snapshot dziennie po godzinie `BACKUP_TIME` w formacie `HH:MM` (domyślnie `03:00`) i według strefy `TZ`. Kopia powstaje, gdy baza zawiera dane. Domyślnie zachowywanych jest 14 najnowszych plików w `/app/data/backup`; retencję ustawia `BACKUP_KEEP`.
+
+W ustawieniach można utworzyć i pobrać backup oraz przywrócić kopię z serwera albo pliku. Przed restore aplikacja sprawdza integralność i schemat bazy, a następnie tworzy dodatkową kopię `pre-restore`. Przywrócone dane są lokalnym snapshotem — kolejna synchronizacja z Habitify może ponownie zaktualizować zakres historii. Kopie w tym samym wolumenie nie chronią przed utratą hosta, dlatego najważniejsze pliki warto pobierać poza serwer.
 
 ## Model danych
 

@@ -9,6 +9,9 @@ services:
       TZ: ${TZ:-Europe/Warsaw}
       HABITIFY_API_KEY: ${HABITIFY_API_KEY:?Ustaw HABITIFY_API_KEY w zmiennych stosu Portainer}
       SYNC_INTERVAL_MINUTES: ${SYNC_INTERVAL_MINUTES:-30}
+      BACKUP_TIME: ${BACKUP_TIME:-03:00}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      MAX_BACKUP_MB: ${MAX_BACKUP_MB:-100}
     volumes:
       - habitify-dashboard-data:/app/data
 

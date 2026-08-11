@@ -6,7 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8080
 
 WORKDIR /app
-RUN addgroup -S habits && adduser -S habits -G habits && mkdir -p /app/data && chown -R habits:habits /app
+RUN apk add --no-cache tzdata && \
+    addgroup -S habits && adduser -S habits -G habits && \
+    mkdir -p /app/data && chown -R habits:habits /app
 COPY --chown=habits:habits app.py /app/app.py
 COPY --chown=root:root docker-entrypoint.py /app/docker-entrypoint.py
 COPY --chown=habits:habits static /app/static

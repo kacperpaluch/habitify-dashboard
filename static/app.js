@@ -102,11 +102,12 @@ function populateOptions(options) {
 
 function render(data) {
   const s = data.summary;
-  $("#metricRate").textContent = `${fmtNumber.format(s.rate)}%`;
+  $("#metricRate").textContent = s.rate === null ? "—" : `${fmtNumber.format(s.rate)}%`;
   $("#metricDone").textContent = fmtNumber.format(s.done);
   $("#metricMissed").textContent = fmtNumber.format(s.missed);
+  $("#metricProgress").textContent = fmtNumber.format(s.in_progress);
   $("#metricPerfect").textContent = fmtNumber.format(s.perfect_days);
-  $("#metricRateSub").textContent = `${s.records} zapisanych okresów`;
+  $("#metricRateSub").textContent = `${s.resolved} zakończonych okresów`;
   $("#dataRange").textContent = state.start && state.end ? `${state.start} — ${state.end}` : "Cały okres";
   renderToday(data.analytics?.today);
   renderHeatmap(data.heatmap);
@@ -137,7 +138,7 @@ function renderAnalytics(analytics) {
 
   renderTrend(analytics.trends.daily.length ? analytics.trends.daily : analytics.trends.weekly);
   renderBars("#weekdayBars", analytics.weekdays.filter((x) => x.records).map((x) => ({ name: weekdays[x.day], rate: x.rate, meta: `${x.records}` })));
-  renderBars("#listBars", analytics.lists.map((x) => ({ name: x.name, rate: x.rate, meta: `${x.done}/${x.total}` })));
+  renderBars("#listBars", analytics.lists.map((x) => ({ name: x.name, rate: x.rate, meta: `${x.done}/${x.total}${x.in_progress ? ` · ${x.in_progress} w trakcie` : ""}` })));
   renderMonthly(analytics.monthly);
   renderHabitInsights(analytics);
   renderRecords(analytics.goal_metrics);
@@ -153,7 +154,7 @@ function renderBars(selector, items) {
 function renderMonthly(items) {
   $("#monthlyGrid").innerHTML = items.length ? items.map((item) => {
     const [year, month] = item.month.split("-").map(Number);
-    return `<article class="month-card"><span>${months[month - 1]} ${year}</span><strong>${fmtNumber.format(item.rate)}%</strong><small>${item.perfect_days} idealnych dni · ${item.records} zapisów</small><div class="mini-progress"><i style="width:${item.rate}%"></i></div></article>`;
+    return `<article class="month-card"><span>${months[month - 1]} ${year}</span><strong>${item.rate === null ? "—" : `${fmtNumber.format(item.rate)}%`}</strong><small>${item.perfect_days} idealnych dni · ${item.records} zapisów</small><div class="mini-progress"><i style="width:${item.rate || 0}%"></i></div></article>`;
   }).join("") : "<p class='hint'>Brak miesięcy z danymi dziennymi.</p>";
 }
 
@@ -186,23 +187,21 @@ function renderToday(today) {
     ? "Brak nawyków na dziś"
     : left === 0
       ? "Komplet — wszystko odhaczone"
-      : `${left} ${plural(left, "nawyk został", "nawyki zostały", "nawyków zostało")} do zrobienia`;
+      : `${left} ${plural(left, "cel jest", "cele są", "celów jest")} w trakcie`;
   $("#todayMeta").textContent = today.total ? `${today.done} z ${today.total} wykonane · ${today.date}` : "";
   $("#todayList").innerHTML = left ? today.pending.map((item) => {
-    const periods = (n) => item.unit === "week"
-      ? plural(n, "tydzień", "tygodnie", "tygodni")
-      : plural(n, "dzień", "dni", "dni");
-    const stake = item.streak > 0
-      ? `tracisz serię ${item.streak} ${periods(item.streak)}`
-      : item.missed > 0
-        ? `${item.missed} ${periods(item.missed)} z rzędu bez wykonania`
-        : "jeszcze nie zaczęte";
-    const progress = item.goal > 0
-      ? `${fmtNumber.format(item.quantity)} / ${fmtNumber.format(item.goal)} ${escapeHtml(item.value_unit)}`
-      : `limit 0 · odnotowano ${fmtNumber.format(item.quantity)} ${escapeHtml(item.value_unit)}`;
-    const tone = item.streak > 0 ? " streak" : item.missed > 0 ? " cold" : "";
-    return `<div class="today-row${tone}"><span><strong>${escapeHtml(item.name)}</strong><small>${progress}</small></span><span class="stake">${stake}</span></div>`;
+    const progress = progressText(item);
+    const streak = item.streak ? ` · seria ${item.streak} ${item.unit === "week" ? "tyg." : "dni"}` : "";
+    return `<div class="today-row pending"><span><strong>${escapeHtml(item.name)}</strong><small>${progress}</small></span><span class="stake">W trakcie${streak}</span></div>`;
   }).join("") : `<p class="today-clear">${today.total ? "Wszystkie dzisiejsze cele zaliczone." : "Habitify nie zwrócił nawyków zaplanowanych na dziś."}</p>`;
+}
+
+function progressText(item) {
+  const unit = escapeHtml(item.value_unit || "");
+  if (item.type === "Breaking" && item.goal === 0) return item.quantity === 0 ? "cel zachowany do tej pory" : `${fmtNumber.format(item.quantity)} ${unit} · cel przekroczony`;
+  if (item.type === "Breaking") return `${fmtNumber.format(item.quantity)} / ${fmtNumber.format(item.goal)} ${unit} · pozostało ${fmtNumber.format(Math.max(0, item.goal - item.quantity))} ${unit}`;
+  const percent = item.goal > 0 ? Math.min(100, item.quantity / item.goal * 100) : 0;
+  return `${fmtNumber.format(item.quantity)} / ${fmtNumber.format(item.goal)} ${unit} · ${fmtNumber.format(percent)}%`;
 }
 
 function renderRecords(items) {
@@ -284,11 +283,11 @@ function renderHeatmap(values) {
     const rate = item?.rate ?? 0;
     const level = rate === 0 ? 0 : rate < 40 ? 1 : rate < 70 ? 2 : rate < 100 ? 3 : 4;
     const cell = document.createElement("button");
-    cell.className = `heat-cell${day < actualStart || day > actualEnd ? " outside" : ""}`;
+    cell.className = `heat-cell${day < actualStart || day > actualEnd ? " outside" : ""}${item?.in_progress ? " in-progress" : ""}`;
     cell.dataset.level = level;
     cell.type = "button";
     cell.title = item
-      ? `${dayIso}: ${item.done}/${item.total} wykonane (${item.rate}%)`
+      ? `${dayIso}: ${item.done}/${item.total} wykonane${item.in_progress ? ` · ${item.in_progress} w trakcie` : ""} (${item.rate}%)`
       : `${dayIso}: brak danych`;
     cell.setAttribute("aria-label", cell.title);
     container.append(cell);
@@ -315,10 +314,12 @@ function renderHabits(habits) {
   body.innerHTML = habits.map((habit) => {
     const unit = habit.streak_unit === "week" ? "tyg." : "dni";
     const average = habit.unit ? `${fmtNumber.format(habit.average)} ${escapeHtml(habit.unit)}` : fmtNumber.format(habit.average);
+    const hasRate = habit.rate !== null;
     return `<tr>
       <td><div class="habit-name"><span class="habit-dot">${escapeHtml(habit.name[0] || "H")}</span><span><strong>${escapeHtml(habit.name)}</strong><small>${escapeHtml(habit.list || habit.type)} · ${escapeHtml(habit.period)}</small></span></div></td>
-      <td class="rate-cell"><div class="rate-top"><strong>${fmtNumber.format(habit.rate)}%</strong><span>${habit.rate >= 80 ? "dobry rytm" : "do poprawy"}</span></div><div class="progress"><i style="width:${habit.rate}%"></i></div></td>
+      <td class="rate-cell"><div class="rate-top"><strong>${hasRate ? `${fmtNumber.format(habit.rate)}%` : "—"}</strong><span>${hasRate ? (habit.rate >= 80 ? "dobry rytm" : "do poprawy") : "brak zamkniętych"}</span></div><div class="progress"><i style="width:${habit.rate || 0}%"></i></div></td>
       <td class="positive">${habit.done}</td><td class="${habit.missed ? "negative" : ""}">${habit.missed}</td>
+      <td class="pending-count">${habit.in_progress || "—"}</td>
       <td><strong>${habit.current_streak}</strong> ${unit}<br><small>rekord ${habit.longest_streak}</small></td>
       <td>${average}</td>
       <td><button class="row-open" data-habit="${encodeURIComponent(habit.name)}" aria-label="Otwórz ${escapeHtml(habit.name)}">›</button></td>
@@ -334,9 +335,9 @@ async function openDetail(name) {
     $("#detailContent").innerHTML = `
       <div class="detail-head"><p class="eyebrow">${escapeHtml(detail.list || detail.type)} · ${escapeHtml(detail.period)}</p><h2>${escapeHtml(detail.name)}</h2><p class="dialog-intro">Cel: ${fmtNumber.format(detail.goal)} ${escapeHtml(detail.unit)} · ${escapeHtml(detail.type)}</p></div>
       <div class="detail-kpis">
-        <div class="detail-kpi"><span>Skuteczność</span><strong>${fmtNumber.format(detail.rate)}%</strong></div>
+        <div class="detail-kpi"><span>Skuteczność</span><strong>${detail.rate === null ? "—" : `${fmtNumber.format(detail.rate)}%`}</strong></div>
+        <div class="detail-kpi"><span>W trakcie</span><strong>${detail.in_progress}</strong></div>
         <div class="detail-kpi"><span>Aktualny streak</span><strong>${detail.current_streak} ${unit}</strong></div>
-        <div class="detail-kpi"><span>Rekord</span><strong>${detail.longest_streak} ${unit}</strong></div>
         <div class="detail-kpi"><span>Średnia</span><strong>${fmtNumber.format(detail.average)} ${escapeHtml(detail.unit)}</strong></div>
       </div>
       <div class="chart-wrap"><p class="chart-title">Wartość w czasie</p><canvas id="detailChart"></canvas></div>`;
@@ -365,7 +366,7 @@ function drawChart(detail) {
   if (values.length) {
     ctx.strokeStyle = "#355f4b"; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
     values.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))); ctx.stroke();
-    values.forEach((v, i) => { ctx.beginPath(); ctx.fillStyle = detail.records[i].complete ? "#355f4b" : "#bd6557"; ctx.arc(x(i), y(v), 3, 0, Math.PI * 2); ctx.fill(); });
+    values.forEach((v, i) => { ctx.beginPath(); ctx.fillStyle = detail.records[i].state === "complete" ? "#355f4b" : detail.records[i].state === "in_progress" ? "#c59044" : "#bd6557"; ctx.arc(x(i), y(v), 3, 0, Math.PI * 2); ctx.fill(); });
   }
   ctx.fillStyle = "#73776f"; ctx.font = "10px sans-serif"; ctx.fillText(`cel ${fmtNumber.format(detail.goal)}`, p + 4, Math.max(10, y(detail.goal) - 6));
 }
@@ -387,9 +388,45 @@ async function syncHabitify(full = false) {
   }
 }
 
+async function loadBackups() {
+  const status = await api("/api/backups");
+  const latest = status.latest;
+  $("#backupStatus").innerHTML = latest
+    ? `<strong>${status.healthy ? "Backup sprawdzony" : "Backup wymaga uwagi"}</strong><small>${escapeHtml(latest.file)} · ${latest.size_kb} KB · codziennie ${escapeHtml(status.backup_time)} · retencja ${status.keep}</small>`
+    : `<strong>Brak backupu</strong><small>Pierwszy snapshot powstanie po ${escapeHtml(status.backup_time)}, gdy baza będzie zawierała dane.</small>`;
+  $("#backupList").innerHTML = status.backups.length ? status.backups.map((item) => `
+    <div class="backup-row"><span><strong>${item.kind === "pre_restore" ? "Kopia przed przywróceniem" : "Snapshot danych"}</strong><small>${new Date(item.modified).toLocaleString("pl-PL")} · ${item.size_kb} KB</small></span><span><a href="/api/backups/${encodeURIComponent(item.file)}/download">Pobierz</a><button data-restore="${escapeHtml(item.file)}">Przywróć</button></span></div>`).join("") : "";
+  $$('[data-restore]').forEach((button) => button.addEventListener("click", () => restoreServerBackup(button.dataset.restore)));
+}
+
+async function restoreServerBackup(filename) {
+  const confirmation = prompt(`Przywrócenie zastąpi lokalny snapshot Habitify. Wpisz PRZYWRÓĆ, aby użyć kopii:\n${filename}`);
+  if (confirmation !== "PRZYWRÓĆ") return;
+  try {
+    const result = await api(`/api/backups/${encodeURIComponent(filename)}/restore`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmation }),
+    });
+    toast(`Baza przywrócona. Kopia bezpieczeństwa: ${result.safety_backup}`);
+    await Promise.all([load(true), loadSyncSettings()]);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function restoreUploadedBackup(file) {
+  if (!file) return;
+  const confirmation = prompt("Przywrócenie zastąpi lokalny snapshot Habitify. Wpisz PRZYWRÓĆ, aby kontynuować.");
+  if (confirmation !== "PRZYWRÓĆ") { $("#backupFileInput").value = ""; return; }
+  const form = new FormData(); form.append("file", file);
+  try {
+    const result = await api(`/api/backups/restore-upload?confirmation=${encodeURIComponent(confirmation)}`, { method: "POST", body: form });
+    toast(`Baza przywrócona z pliku. Kopia bezpieczeństwa: ${result.safety_backup}`);
+    await Promise.all([load(true), loadSyncSettings()]);
+  } catch (error) { toast(error.message, true); }
+  finally { $("#backupFileInput").value = ""; }
+}
+
 async function loadSyncSettings() {
   try {
-    const [config, syncs] = await Promise.all([api("/api/config"), api("/api/syncs")]);
+    const [config, syncs] = await Promise.all([api("/api/config"), api("/api/syncs"), loadBackups()]);
     const latest = config.latest_sync;
     $("#connectionStatus").className = `quality-callout ${config.habitify_configured && latest?.status !== "failed" ? "quality-good" : ""}`;
     $("#connectionStatus").textContent = !config.habitify_configured
@@ -412,6 +449,15 @@ $("#syncButton").addEventListener("click", () => syncHabitify());
 $("#dialogSyncButton").addEventListener("click", () => syncHabitify());
 $("#fullSyncButton").addEventListener("click", () => syncHabitify(true));
 $("#settingsButton").addEventListener("click", async () => { await loadSyncSettings(); $("#settingsDialog").showModal(); });
+$("#backupNow").addEventListener("click", async () => {
+  try {
+    const result = await api("/api/backup", { method: "POST" });
+    toast(`Utworzono backup ${result.backup}`);
+    await loadBackups();
+  } catch (error) { toast(error.message, true); }
+});
+$("#restoreUpload").addEventListener("click", () => $("#backupFileInput").click());
+$("#backupFileInput").addEventListener("change", (event) => restoreUploadedBackup(event.target.files[0]));
 
 $$('[data-range]').forEach((button) => button.addEventListener("click", async () => {
   state.range = button.dataset.range;

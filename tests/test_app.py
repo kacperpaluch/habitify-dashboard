@@ -1,7 +1,8 @@
 import sqlite3
 import tempfile
 import unittest
-from datetime import date
+from contextlib import closing
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,7 +13,11 @@ class HabitLensTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.previous_db = app.DB_PATH
+        self.previous_backup_dir = app.BACKUP_DIR
+        self.previous_backup_time = app.BACKUP_TIME
         app.DB_PATH = Path(self.tmp.name) / "test.db"
+        app.BACKUP_DIR = Path(self.tmp.name) / "backup"
+        app.BACKUP_TIME = "00:00"
         app.init_db()
         self.habits = [
             {
@@ -47,6 +52,8 @@ class HabitLensTests(unittest.TestCase):
 
     def tearDown(self):
         app.DB_PATH = self.previous_db
+        app.BACKUP_DIR = self.previous_backup_dir
+        app.BACKUP_TIME = self.previous_backup_time
         self.tmp.cleanup()
 
     def fake_request(self, path, params=None):
@@ -63,7 +70,7 @@ class HabitLensTests(unittest.TestCase):
         second = self.sync()
         self.assertEqual(first["inserted_rows"], 4)
         self.assertEqual(second["updated_rows"], 4)
-        with app.connect() as conn:
+        with closing(app.connect()) as conn:
             rows = [dict(row) for row in conn.execute("SELECT * FROM records ORDER BY habit_id,date")]
         fiber = [row for row in rows if row["habit_id"] == "fiber"]
         exercise = [row for row in rows if row["habit_id"] == "exercise"]
@@ -79,16 +86,34 @@ class HabitLensTests(unittest.TestCase):
         result = app.dashboard({"start": ["2026-08-03"], "end": ["2026-08-04"]}, today=date(2026, 8, 4))
         self.assertEqual(result["summary"]["records"], 4)
         self.assertEqual(result["summary"]["done"], 2)
-        self.assertEqual(result["summary"]["rate"], 50.0)
+        self.assertEqual(result["summary"]["missed"], 0)
+        self.assertEqual(result["summary"]["in_progress"], 2)
+        self.assertEqual(result["summary"]["rate"], 100.0)
         self.assertEqual(result["summary"]["perfect_days"], 1)
+        self.assertNotIn("2026-08-04", {point["date"] for point in result["analytics"]["trends"]["daily"]})
         self.assertEqual(app.streaks(app.all_rows_for_habit("Błonnik"), date(2026, 8, 4)), (1, 1, "day"))
         self.assertIsNotNone(result["analytics"]["data_quality"]["latest_sync"])
+
+    def test_current_periods_become_missed_after_they_end(self):
+        self.sync(full=True)
+        result = app.dashboard({}, today=date(2026, 8, 10))
+        self.assertEqual(result["summary"]["in_progress"], 0)
+        self.assertEqual(result["summary"]["missed"], 2)
+        self.assertEqual(result["summary"]["rate"], 50.0)
+
+    def test_only_current_periods_have_no_failure_rate(self):
+        self.sync(full=True)
+        result = app.dashboard({"start": ["2026-08-04"], "end": ["2026-08-04"]},
+                               today=date(2026, 8, 4))
+        self.assertEqual(result["summary"]["in_progress"], 1)
+        self.assertEqual(result["summary"]["missed"], 0)
+        self.assertIsNone(result["summary"]["rate"])
 
     def test_rename_keeps_one_habit_and_updates_history(self):
         self.sync(full=True)
         self.habits[0]["name"] = "Błonnik pokarmowy"
         self.sync()
-        with app.connect() as conn:
+        with closing(app.connect()) as conn:
             names = [row[0] for row in conn.execute("SELECT DISTINCT name FROM records WHERE habit_id='fiber'")]
             habit_count = conn.execute("SELECT COUNT(*) FROM habits WHERE id='fiber'").fetchone()[0]
         self.assertEqual(names, ["Błonnik pokarmowy"])
@@ -96,11 +121,11 @@ class HabitLensTests(unittest.TestCase):
 
     def test_legacy_schema_is_discarded(self):
         legacy_path = Path(self.tmp.name) / "legacy.db"
-        with sqlite3.connect(legacy_path) as conn:
+        with closing(sqlite3.connect(legacy_path)) as conn:
             conn.executescript("CREATE TABLE imports(id INTEGER); CREATE TABLE records(date TEXT);")
         app.DB_PATH = legacy_path
         app.init_db()
-        with app.connect() as conn:
+        with closing(app.connect()) as conn:
             old_table = conn.execute("SELECT 1 FROM sqlite_master WHERE name='imports'").fetchone()
             version = conn.execute("PRAGMA user_version").fetchone()[0]
             records = conn.execute("SELECT COUNT(*) FROM records").fetchone()[0]
@@ -128,6 +153,42 @@ class HabitLensTests(unittest.TestCase):
         self.assertEqual(app.habit_behavior(rows)["median_recovery"], 1)
         self.assertEqual(app.goal_metrics(rows)["personal_best"]["value"], 15.0)
         self.assertEqual(app.coverage_metrics(rows)["coverage"], 75.0)
+
+    def test_backup_restore_and_safety_copy(self):
+        synced = self.sync(full=True)
+        self.assertTrue(synced["backup"])
+        snapshot = app.backup_database("manual")
+        validation = app.validate_database(snapshot)
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["counts"]["records"], 4)
+
+        with closing(app.connect()) as conn:
+            conn.execute("DELETE FROM records")
+            conn.commit()
+        restored = app.restore_database(snapshot)
+        self.assertTrue(restored["ok"])
+        self.assertTrue((app.BACKUP_DIR / restored["safety_backup"]).is_file())
+        with closing(app.connect()) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM records").fetchone()[0], 4)
+
+    def test_scheduled_backup_runs_once_after_configured_time(self):
+        app.BACKUP_TIME = "23:59"
+        self.sync(full=True)
+        now = datetime.now().astimezone().replace(hour=12, minute=0, second=0, microsecond=0)
+        self.assertIsNone(app.backup_if_due(now))
+        app.BACKUP_TIME = "00:00"
+        first = app.backup_if_due(now)
+        self.assertIsNotNone(first)
+        self.assertIsNone(app.backup_if_due(now))
+
+    def test_restore_rejects_foreign_database(self):
+        self.sync(full=True)
+        foreign = Path(self.tmp.name) / "foreign.db"
+        foreign.write_bytes(b"not sqlite")
+        with self.assertRaises(app.HabitifyError):
+            app.restore_database(foreign)
+        with closing(app.connect()) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM records").fetchone()[0], 4)
 
 
 if __name__ == "__main__":

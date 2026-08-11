@@ -7,6 +7,8 @@ Self-hostowany, tylko do odczytu dashboard analityczny dla danych z Habitify.
 - automatyczna i ręczna synchronizacja z Habitify API v2,
 - heatmapa, skuteczność, streaki oraz trendy 7/30 dni,
 - obsługa celów dziennych i tygodniowych,
+- trwające dni i tygodnie bez fałszywych niepowodzeń,
+- automatyczne i ręczne backupy SQLite z bezpiecznym przywracaniem,
 - lokalny snapshot SQLite przechowywany w trwałym wolumenie,
 - lekki obraz bez zależności runtime poza standardową biblioteką Pythona,
 - obrazy dla `linux/amd64` i `linux/arm64`.
@@ -23,6 +25,9 @@ services:
     environment:
       HABITIFY_API_KEY: wpisz_swoj_klucz
       SYNC_INTERVAL_MINUTES: 30
+      BACKUP_TIME: "03:00"
+      BACKUP_KEEP: 14
+      MAX_BACKUP_MB: 100
       TZ: Europe/Warsaw
     volumes:
       - habitify-dashboard-data:/app/data

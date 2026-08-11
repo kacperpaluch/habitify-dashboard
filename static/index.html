@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f4f2ed">
   <title>Habit Lens — Habitify Analytics</title>
   <meta name="description" content="Minimalistyczne statystyki i wizualizacje danych z Habitify.">
-  <link rel="stylesheet" href="/styles.css?v=2">
+  <link rel="stylesheet" href="/styles.css?v=3">
 </head>
 <body>
   <div class="app-shell">
@@ -56,7 +56,7 @@
       <section class="metrics" aria-label="Podsumowanie">
         <article class="metric-card accent">
           <span>Skuteczność</span><strong id="metricRate">—</strong>
-          <small id="metricRateSub">w wybranym okresie</small>
+          <small id="metricRateSub">tylko zakończone okresy</small>
         </article>
         <article class="metric-card">
           <span>Wykonane</span><strong id="metricDone">—</strong>
@@ -65,6 +65,10 @@
         <article class="metric-card">
           <span>Niewykonane</span><strong id="metricMissed">—</strong>
           <small>wymagają uwagi</small>
+        </article>
+        <article class="metric-card pending">
+          <span>W trakcie</span><strong id="metricProgress">—</strong>
+          <small>bieżący dzień lub tydzień</small>
         </article>
         <article class="metric-card">
           <span>Idealne dni</span><strong id="metricPerfect">—</strong>
@@ -100,7 +104,7 @@
         </div>
         <div class="heatmap-footer">
           <span id="heatmapCaption">Każdy kwadrat to jeden dzień</span>
-          <div class="legend"><span>Mniej</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>Więcej</span></div>
+          <div class="legend"><span>Mniej</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>Więcej</span><i class="pending-cell"></i><span>W trakcie</span></div>
         </div>
       </section>
 
@@ -111,7 +115,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Nawyk</th><th>Skuteczność</th><th>Wykonane</th><th>Niewykonane</th><th>Aktualny streak</th><th>Średnia</th><th></th></tr></thead>
+            <thead><tr><th>Nawyk</th><th>Skuteczność</th><th>Wykonane</th><th>Niewykonane</th><th>W trakcie</th><th>Aktualny streak</th><th>Średnia</th><th></th></tr></thead>
             <tbody id="habitRows"></tbody>
           </table>
         </div>
@@ -191,9 +195,21 @@
       <button id="fullSyncButton" class="button secondary" type="button">Pełna synchronizacja</button>
     </div>
     <div class="imports"><h3>Ostatnie synchronizacje</h3><div id="syncHistory"></div></div>
+    <section class="backup-section">
+      <p class="eyebrow">BEZPIECZEŃSTWO</p>
+      <h3>Backup i przywracanie</h3>
+      <p class="hint">Aplikacja raz dziennie o skonfigurowanej godzinie tworzy zweryfikowany snapshot. Przed każdym restore zapisuje dodatkową kopię bezpieczeństwa.</p>
+      <div class="backup-actions">
+        <button id="backupNow" class="button secondary" type="button">Utwórz backup</button>
+        <button id="restoreUpload" class="button secondary" type="button">Przywróć z pliku .db</button>
+      </div>
+      <input id="backupFileInput" type="file" accept=".db,application/vnd.sqlite3" hidden>
+      <div id="backupStatus" class="backup-status"></div>
+      <div id="backupList" class="backup-list"></div>
+    </section>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=2" defer></script>
+  <script src="/app.js?v=3" defer></script>
 </body>
 </html>
