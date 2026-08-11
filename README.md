@@ -13,6 +13,7 @@ Self-hostowany dashboard analityczny dla danych z Habitify. Habitify jest jedyny
 - bieżący dzień i tydzień jako „w trakcie”, bez zaniżania skuteczności,
 - heatmapa, skuteczność, streaki, trendy 7/30 i porównania okresów,
 - codzienny backup o wybranej godzinie, kopia na żądanie i bezpieczne przywracanie,
+- paginowana historia synchronizacji i backupów z filtrem zakresu dat,
 - reszta analityki zwinięta w sekcji „Analiza historyczna",
 - stabilne identyfikatory Habitify — zmiana nazwy nie rozdziela historii,
 - brak zależności runtime poza biblioteką standardową Pythona.
@@ -90,11 +91,15 @@ API aplikacji:
 | `POST` | `/api/backups/{file}/restore` | przywrócenie kopii serwerowej |
 | `POST` | `/api/backups/restore-upload` | przywrócenie przesłanego pliku `.db` |
 
+Endpointy historii `/api/syncs` i `/api/backups` przyjmują `page`, `per_page`, `date_from` oraz `date_to`. Interfejs pokazuje po 10 wpisów i nie renderuje obu list jednocześnie.
+
 ## Backup i przywracanie
 
 Aplikacja tworzy najwyżej jeden automatyczny snapshot dziennie po godzinie `BACKUP_TIME` w formacie `HH:MM` (domyślnie `03:00`) i według strefy `TZ`. Kopia powstaje, gdy baza zawiera dane. Domyślnie zachowywanych jest 14 najnowszych plików w `/app/data/backup`; retencję ustawia `BACKUP_KEEP`.
 
 W ustawieniach można utworzyć i pobrać backup oraz przywrócić kopię z serwera albo pliku. Przed restore aplikacja sprawdza integralność i schemat bazy, a następnie tworzy dodatkową kopię `pre-restore`. Przywrócone dane są lokalnym snapshotem — kolejna synchronizacja z Habitify może ponownie zaktualizować zakres historii. Kopie w tym samym wolumenie nie chronią przed utratą hosta, dlatego najważniejsze pliki warto pobierać poza serwer.
+
+Każdy plik backupu `.db` jest finalizowany w trybie jednoplikowym i wystarcza samodzielnie do przywrócenia. Pliki `habits.db-wal` i `habits.db-shm` obok **aktywnej** bazy są normalnymi plikami roboczymi SQLite i mogą istnieć podczas działania aplikacji. Osierocone sidecary przy snapshotach w katalogu `backup/` są automatycznie usuwane.
 
 ## Model danych
 

@@ -7,6 +7,7 @@ const state = {
   period: "",
   data: null,
 };
+const historyState = { tab: "syncs", page: 1, perPage: 10, dateFrom: "", dateTo: "" };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -388,15 +389,41 @@ async function syncHabitify(full = false) {
   }
 }
 
-async function loadBackups() {
-  const status = await api("/api/backups");
+function renderBackupStatus(status) {
   const latest = status.latest;
   $("#backupStatus").innerHTML = latest
     ? `<strong>${status.healthy ? "Backup sprawdzony" : "Backup wymaga uwagi"}</strong><small>${escapeHtml(latest.file)} · ${latest.size_kb} KB · codziennie ${escapeHtml(status.backup_time)} · retencja ${status.keep}</small>`
     : `<strong>Brak backupu</strong><small>Pierwszy snapshot powstanie po ${escapeHtml(status.backup_time)}, gdy baza będzie zawierała dane.</small>`;
-  $("#backupList").innerHTML = status.backups.length ? status.backups.map((item) => `
-    <div class="backup-row"><span><strong>${item.kind === "pre_restore" ? "Kopia przed przywróceniem" : "Snapshot danych"}</strong><small>${new Date(item.modified).toLocaleString("pl-PL")} · ${item.size_kb} KB</small></span><span><a href="/api/backups/${encodeURIComponent(item.file)}/download">Pobierz</a><button data-restore="${escapeHtml(item.file)}">Przywróć</button></span></div>`).join("") : "";
+}
+
+function historyQuery() {
+  const params = new URLSearchParams({ page: historyState.page, per_page: historyState.perPage });
+  if (historyState.dateFrom) params.set("date_from", historyState.dateFrom);
+  if (historyState.dateTo) params.set("date_to", historyState.dateTo);
+  return params.toString();
+}
+
+function renderHistoryPagination(pagination) {
+  $("#historyCount").textContent = `${pagination.total} ${plural(pagination.total, "wpis", "wpisy", "wpisów")}`;
+  $("#historyPage").textContent = `Strona ${pagination.page} z ${pagination.pages}`;
+  $("#historyPrevious").disabled = !pagination.has_previous;
+  $("#historyNext").disabled = !pagination.has_next;
+}
+
+async function loadHistory() {
+  const backups = historyState.tab === "backups";
+  const result = await api(`/${backups ? "api/backups" : "api/syncs"}?${historyQuery()}`);
+  const items = backups ? result.backups : result.items;
+  if (backups) renderBackupStatus(result);
+  $("#historyList").innerHTML = items.length ? items.map((item) => backups ? `
+    <div class="backup-row"><span><strong>${item.kind === "pre_restore" ? "Kopia przed przywróceniem" : item.kind === "manual" ? "Backup ręczny" : "Backup automatyczny"}</strong><small>${new Date(item.modified).toLocaleString("pl-PL")} · ${item.size_kb} KB</small></span><span><a href="/api/backups/${encodeURIComponent(item.file)}/download">Pobierz</a><button data-restore="${escapeHtml(item.file)}">Przywróć</button></span></div>` : `
+    <div class="import-row"><span><strong>${item.status === "success" ? "Zakończona" : item.status === "failed" ? "Błąd" : "W toku"}</strong><br>${new Date(item.completed_at || item.started_at).toLocaleString("pl-PL")}${item.full_sync ? " · pełna" : ""}</span><span>${item.habit_count} nawyków · ${item.total_rows} okresów<br>${item.status === "failed" ? escapeHtml(item.error || "Nieznany błąd") : `+${item.inserted_rows} / ↻${item.updated_rows}`}</span></div>`).join("") : "<p class='hint'>Brak wpisów w wybranym zakresie.</p>";
+  renderHistoryPagination(result.pagination);
   $$('[data-restore]').forEach((button) => button.addEventListener("click", () => restoreServerBackup(button.dataset.restore)));
+}
+
+async function loadBackupSummary() {
+  renderBackupStatus(await api("/api/backups?page=1&per_page=1"));
 }
 
 async function restoreServerBackup(filename) {
@@ -426,7 +453,7 @@ async function restoreUploadedBackup(file) {
 
 async function loadSyncSettings() {
   try {
-    const [config, syncs] = await Promise.all([api("/api/config"), api("/api/syncs"), loadBackups()]);
+    const [config] = await Promise.all([api("/api/config"), loadBackupSummary(), loadHistory()]);
     const latest = config.latest_sync;
     $("#connectionStatus").className = `quality-callout ${config.habitify_configured && latest?.status !== "failed" ? "quality-good" : ""}`;
     $("#connectionStatus").textContent = !config.habitify_configured
@@ -438,8 +465,6 @@ async function loadSyncSettings() {
           : config.sync_interval_minutes
             ? `Połączenie skonfigurowane · synchronizacja co ${config.sync_interval_minutes} min.`
             : "Połączenie skonfigurowane · automatyczna synchronizacja wyłączona.";
-    $("#syncHistory").innerHTML = syncs.length ? syncs.map((item) => `
-      <div class="import-row"><span><strong>${item.status === "success" ? "Zakończona" : item.status === "failed" ? "Błąd" : "W toku"}</strong><br>${new Date(item.completed_at || item.started_at).toLocaleString("pl-PL")}${item.full_sync ? " · pełna" : ""}</span><span>${item.habit_count} nawyków · ${item.total_rows} okresów<br>+${item.inserted_rows} / ↻${item.updated_rows}</span></div>`).join("") : "<p class='hint'>Brak synchronizacji.</p>";
   } catch (error) { toast(error.message, true); }
 }
 
@@ -453,11 +478,22 @@ $("#backupNow").addEventListener("click", async () => {
   try {
     const result = await api("/api/backup", { method: "POST" });
     toast(`Utworzono backup ${result.backup}`);
-    await loadBackups();
+    historyState.tab = "backups"; historyState.page = 1;
+    $$('[data-history-tab]').forEach((button) => button.classList.toggle("active", button.dataset.historyTab === "backups"));
+    await Promise.all([loadBackupSummary(), loadHistory()]);
   } catch (error) { toast(error.message, true); }
 });
 $("#restoreUpload").addEventListener("click", () => $("#backupFileInput").click());
 $("#backupFileInput").addEventListener("change", (event) => restoreUploadedBackup(event.target.files[0]));
+$$('[data-history-tab]').forEach((button) => button.addEventListener("click", async () => {
+  historyState.tab = button.dataset.historyTab; historyState.page = 1;
+  $$('[data-history-tab]').forEach((item) => item.classList.toggle("active", item === button));
+  await loadHistory();
+}));
+$("#historyApply").addEventListener("click", async () => { historyState.dateFrom = $("#historyFrom").value; historyState.dateTo = $("#historyTo").value; historyState.page = 1; await loadHistory(); });
+$("#historyClear").addEventListener("click", async () => { $("#historyFrom").value = ""; $("#historyTo").value = ""; historyState.dateFrom = ""; historyState.dateTo = ""; historyState.page = 1; await loadHistory(); });
+$("#historyPrevious").addEventListener("click", async () => { if (historyState.page > 1) { historyState.page -= 1; await loadHistory(); } });
+$("#historyNext").addEventListener("click", async () => { historyState.page += 1; await loadHistory(); });
 
 $$('[data-range]').forEach((button) => button.addEventListener("click", async () => {
   state.range = button.dataset.range;

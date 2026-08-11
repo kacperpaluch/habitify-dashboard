@@ -9,6 +9,7 @@ Self-hostowany, tylko do odczytu dashboard analityczny dla danych z Habitify.
 - obsługa celów dziennych i tygodniowych,
 - trwające dni i tygodnie bez fałszywych niepowodzeń,
 - automatyczne i ręczne backupy SQLite z bezpiecznym przywracaniem,
+- paginowana historia synchronizacji i backupów z filtrem dat,
 - lokalny snapshot SQLite przechowywany w trwałym wolumenie,
 - lekki obraz bez zależności runtime poza standardową biblioteką Pythona,
 - obrazy dla `linux/amd64` i `linux/arm64`.

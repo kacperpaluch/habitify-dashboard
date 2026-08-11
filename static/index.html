@@ -194,7 +194,6 @@
       <button id="dialogSyncButton" class="button primary" type="button">Synchronizuj teraz</button>
       <button id="fullSyncButton" class="button secondary" type="button">Pełna synchronizacja</button>
     </div>
-    <div class="imports"><h3>Ostatnie synchronizacje</h3><div id="syncHistory"></div></div>
     <section class="backup-section">
       <p class="eyebrow">BEZPIECZEŃSTWO</p>
       <h3>Backup i przywracanie</h3>
@@ -205,11 +204,17 @@
       </div>
       <input id="backupFileInput" type="file" accept=".db,application/vnd.sqlite3" hidden>
       <div id="backupStatus" class="backup-status"></div>
-      <div id="backupList" class="backup-list"></div>
+    </section>
+    <section class="history-section">
+      <div class="history-heading"><h3>Historia danych</h3><span id="historyCount">0 wpisów</span></div>
+      <div class="history-tabs"><button class="active" type="button" data-history-tab="syncs">Synchronizacje</button><button type="button" data-history-tab="backups">Backupy</button></div>
+      <div class="history-filters"><label>Od<input id="historyFrom" type="date"></label><label>Do<input id="historyTo" type="date"></label><button id="historyApply" type="button">Filtruj</button><button id="historyClear" type="button">Wyczyść</button></div>
+      <div id="historyList" class="history-list"></div>
+      <div class="history-pagination"><button id="historyPrevious" type="button">← Poprzednia</button><span id="historyPage">Strona 1 z 1</span><button id="historyNext" type="button">Następna →</button></div>
     </section>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=3" defer></script>
+  <script src="/app.js?v=4" defer></script>
 </body>
 </html>

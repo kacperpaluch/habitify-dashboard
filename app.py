@@ -162,7 +162,7 @@ def validate_database(path: Path) -> dict:
         with path.open("rb") as handle:
             if handle.read(16) != b"SQLite format 3\x00":
                 raise ValueError("Plik nie jest bazą SQLite")
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)
         try:
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
             if integrity != "ok":
@@ -197,6 +197,19 @@ def backup_filename(kind: str = "backup") -> str:
     return f"habit-lens-{kind}-{stamp}.db"
 
 
+def cleanup_backup_sidecars(path: Path) -> None:
+    for suffix in ("-wal", "-shm"):
+        Path(str(path) + suffix).unlink(missing_ok=True)
+
+
+def cleanup_backup_directory_sidecars() -> None:
+    if not BACKUP_DIR.is_dir():
+        return
+    for pattern in ("habit-lens-*.db-wal", "habit-lens-*.db-shm"):
+        for path in BACKUP_DIR.glob(pattern):
+            path.unlink(missing_ok=True)
+
+
 def backup_clock() -> tuple[int, int]:
     try:
         parsed = datetime.strptime(BACKUP_TIME, "%H:%M")
@@ -209,6 +222,7 @@ def prune_backups() -> None:
     backups = sorted(BACKUP_DIR.glob("habit-lens-*.db"), key=lambda path: path.stat().st_mtime)
     for old in backups[:-BACKUP_KEEP]:
         old.unlink(missing_ok=True)
+        cleanup_backup_sidecars(old)
 
 
 def backup_database(kind: str = "backup", *, prune: bool = True) -> Path:
@@ -220,9 +234,11 @@ def backup_database(kind: str = "backup", *, prune: bool = True) -> Path:
         destination = sqlite3.connect(target)
         try:
             source.backup(destination)
+            destination.execute("PRAGMA journal_mode=DELETE")
         finally:
             destination.close()
             source.close()
+        cleanup_backup_sidecars(target)
         validation = validate_database(target)
         if not validation["valid"]:
             target.unlink(missing_ok=True)
@@ -259,13 +275,66 @@ def list_backups() -> list[dict]:
     return result
 
 
-def backup_status() -> dict:
+def history_options(params: dict[str, list[str]]) -> tuple[int, int, str | None, str | None]:
+    try:
+        page = max(1, int(params.get("page", ["1"])[0]))
+        per_page = min(50, max(1, int(params.get("per_page", ["10"])[0])))
+    except ValueError as exc:
+        raise HabitifyError("Nieprawidłowa strona historii") from exc
+    date_from = params.get("date_from", [""])[0] or None
+    date_to = params.get("date_to", [""])[0] or None
+    try:
+        if date_from:
+            date.fromisoformat(date_from)
+        if date_to:
+            date.fromisoformat(date_to)
+    except ValueError as exc:
+        raise HabitifyError("Daty historii muszą mieć format RRRR-MM-DD") from exc
+    if date_from and date_to and date_from > date_to:
+        raise HabitifyError("Data początkowa nie może być późniejsza niż końcowa")
+    return page, per_page, date_from, date_to
+
+
+def page_result(items: list[dict], total: int, page: int, per_page: int) -> dict:
+    pages = max(1, (total + per_page - 1) // per_page)
+    return {"items": items, "pagination": {"page": page, "per_page": per_page,
+            "total": total, "pages": pages, "has_previous": page > 1,
+            "has_next": page < pages}}
+
+
+def backup_status(params: dict[str, list[str]] | None = None) -> dict:
     backups = list_backups()
     latest = backups[0] if backups else None
     validation = validate_database(resolve_backup(latest["file"])) if latest else None
+    page, per_page, date_from, date_to = history_options(params or {})
+    filtered = [item for item in backups
+                if (not date_from or item["modified"][:10] >= date_from)
+                and (not date_to or item["modified"][:10] <= date_to)]
+    offset = (page - 1) * per_page
     return {"healthy": bool(latest and validation and validation["valid"]),
             "keep": BACKUP_KEEP, "backup_time": BACKUP_TIME,
-            "latest": latest, "latest_validation": validation, "backups": backups}
+            "latest": latest, "latest_validation": validation,
+            "backups": filtered[offset:offset + per_page],
+            "pagination": page_result([], len(filtered), page, per_page)["pagination"]}
+
+
+def sync_history(params: dict[str, list[str]]) -> dict:
+    page, per_page, date_from, date_to = history_options(params)
+    clauses, values = [], []
+    if date_from:
+        clauses.append("substr(started_at,1,10) >= ?")
+        values.append(date_from)
+    if date_to:
+        clauses.append("substr(started_at,1,10) <= ?")
+        values.append(date_to)
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    offset = (page - 1) * per_page
+    with database() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM sync_runs{where}", values).fetchone()[0]
+        rows = [dict(row) for row in conn.execute(
+            f"SELECT * FROM sync_runs{where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            [*values, per_page, offset])]
+    return page_result(rows, total, page, per_page)
 
 
 def backup_if_due(now: datetime | None = None) -> Path | None:
@@ -297,7 +366,7 @@ def restore_database(source_path: Path) -> dict:
             if not validation["valid"]:
                 raise HabitifyError(f"Nie można przywrócić backupu: {validation['error']}")
             safety = backup_database("pre-restore", prune=False)
-            source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
+            source = sqlite3.connect(f"file:{source_path}?mode=ro&immutable=1", uri=True)
             destination = connect()
             try:
                 source.backup(destination)
@@ -305,6 +374,7 @@ def restore_database(source_path: Path) -> dict:
             finally:
                 destination.close()
                 source.close()
+                cleanup_backup_sidecars(source_path)
             init_db()
             restored = validate_database(DB_PATH)
             if not restored["valid"]:
@@ -1052,7 +1122,7 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/dashboard":
                 return self.send_json(dashboard(params))
             if parsed.path == "/api/backups":
-                return self.send_json(backup_status())
+                return self.send_json(backup_status(params))
             if parsed.path.startswith("/api/backups/") and parsed.path.endswith("/download"):
                 filename = unquote(parsed.path.removeprefix("/api/backups/").removesuffix("/download"))
                 return self.send_file(resolve_backup(filename))
@@ -1060,9 +1130,7 @@ class Handler(BaseHTTPRequestHandler):
                 detail = habit_detail(unquote(parsed.path.removeprefix("/api/habits/")), params)
                 return self.send_json(detail or {"error": "Habit not found"}, 200 if detail else 404)
             if parsed.path == "/api/syncs":
-                with database() as conn:
-                    rows = [dict(r) for r in conn.execute("SELECT * FROM sync_runs ORDER BY id DESC LIMIT 20")]
-                return self.send_json(rows)
+                return self.send_json(sync_history(params))
             return self.serve_static(parsed.path)
         except (HabitifyError, ValueError, sqlite3.Error) as exc:
             return self.send_json({"error": str(exc)}, 400)
@@ -1151,6 +1219,7 @@ def backup_loop() -> None:
 
 if __name__ == "__main__":
     init_db()
+    cleanup_backup_directory_sidecars()
     try:
         backup_if_due()
     except Exception as exc:

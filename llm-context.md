@@ -53,6 +53,8 @@ GET /api/dashboard
 
 Niezależny `backup_loop` sprawdza harmonogram co minutę. Po `BACKUP_TIME` tworzy najwyżej jeden backup `scheduled` danego dnia, o ile istnieją rekordy. Kopia korzysta z online backup API SQLite i przechodzi kontrolę nagłówka, `PRAGMA integrity_check`, schematu oraz SHA-256. Restore tworzy najpierw kopię `pre-restore`; pliki są przechowywane w `/app/data/backup`.
 
+Snapshot jest przełączany na `journal_mode=DELETE`, więc sam `.db` jest kompletnym backupem. Odczyt walidacyjny i restore używają `immutable=1`, a sidecary `-wal`/`-shm` snapshotów są sprzątane. Sidecary aktywnej bazy `/app/data/habits.db` pozostają normalnym elementem WAL.
+
 ## Schemat v2
 
 - `sync_runs`: czas, status, full/incremental, liczniki zmian i komunikat błędu.
@@ -104,6 +106,8 @@ Sieć jest odpytywana przed transakcją zapisu. Dopiero komplet poprawnych odpow
 - `GET /api/backups/{file}/download`
 - `POST /api/backups/{file}/restore`
 - `POST /api/backups/restore-upload`
+
+`GET /api/syncs` i `GET /api/backups` obsługują `page`, `per_page` (maks. 50), `date_from` i `date_to`, zwracając metadane `pagination`. Modal ładuje jedną zakładkę historii naraz.
 
 Filtry dashboardu: `start`, `end`, `habit`, `list`, `period`.
 

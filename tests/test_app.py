@@ -181,6 +181,23 @@ class HabitLensTests(unittest.TestCase):
         self.assertIsNotNone(first)
         self.assertIsNone(app.backup_if_due(now))
 
+    def test_history_is_filtered_and_paginated(self):
+        self.sync(full=True)
+        self.sync()
+        history = app.sync_history({"page": ["2"], "per_page": ["1"],
+                                    "date_from": [date.today().isoformat()]})
+        self.assertEqual(history["pagination"]["total"], 2)
+        self.assertEqual(history["pagination"]["page"], 2)
+        self.assertEqual(len(history["items"]), 1)
+
+    def test_backup_is_single_file_without_wal_sidecars(self):
+        self.sync(full=True)
+        backup = app.backup_database("manual")
+        with closing(sqlite3.connect(f"file:{backup}?mode=ro&immutable=1", uri=True)) as conn:
+            self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0], "delete")
+        self.assertFalse(Path(str(backup) + "-wal").exists())
+        self.assertFalse(Path(str(backup) + "-shm").exists())
+
     def test_restore_rejects_foreign_database(self):
         self.sync(full=True)
         foreign = Path(self.tmp.name) / "foreign.db"
