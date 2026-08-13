@@ -173,6 +173,11 @@ def validate_database(path: Path) -> dict:
             missing = sorted(REQUIRED_BACKUP_TABLES - tables)
             if missing:
                 raise ValueError("Brak tabel Habit Lens: " + ", ".join(missing))
+            # Przywracanie woła init_db(), a ten kasuje tabele ze starego schematu.
+            # Odrzucenie tutaj zatrzymuje taką bazę przed, a nie po skasowaniu danych.
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version < 2 or "imports" in tables:
+                raise ValueError(f"Backup pochodzi ze starszego schematu (user_version={version})")
             counts = {
                 "habits": conn.execute("SELECT COUNT(*) FROM habits").fetchone()[0],
                 "records": conn.execute("SELECT COUNT(*) FROM records").fetchone()[0],
@@ -766,7 +771,9 @@ def goal_metrics(rows: list[dict]) -> dict:
         if row["goal"] <= 0:
             continue
         if breaking:
-            ratios.append(row["goal"] / max(row["quantity"], 0.000001) * 100)
+            # Zero logów bije limit bezwarunkowo; bez sufitu dzielenie przez ~0
+            # wywalało średnią w miliony procent.
+            ratios.append(min(row["goal"] / row["quantity"] * 100, 999) if row["quantity"] > 0 else 999)
         else:
             ratios.append(row["quantity"] / row["goal"] * 100)
     best = min(rows, key=lambda r: r["quantity"]) if breaking else max(rows, key=lambda r: r["quantity"])
@@ -971,7 +978,8 @@ def dashboard(params: dict[str, list[str]], today: date | None = None) -> dict:
         done = sum(is_complete(r) for r in items)
         missed = sum(record_state(r, today) == "missed" for r in items)
         in_progress = sum(record_state(r, today) == "in_progress" for r in items)
-        quantities = [r["quantity"] for r in items]
+        # Trwający okres ma z definicji niepełną wartość — w średniej zaniżałby wynik.
+        quantities = [r["quantity"] for r in items if record_state(r, today) != "in_progress"]
         habit_stats.append({
             "name": name, "period": items[0]["period"], "type": items[0]["habit_type"],
             "unit": items[0]["unit"], "goal": items[-1]["goal"],
@@ -1031,7 +1039,7 @@ def habit_detail(name: str, params: dict[str, list[str]], today: date | None = N
     done = sum(is_complete(r) for r in rows)
     missed = sum(record_state(r, today) == "missed" for r in rows)
     in_progress = sum(record_state(r, today) == "in_progress" for r in rows)
-    quantities = [r["quantity"] for r in rows]
+    quantities = [r["quantity"] for r in rows if record_state(r, today) != "in_progress"]
     weekday = defaultdict(lambda: [0, 0])
     for row in rows:
         idx = date.fromisoformat(row["date"]).weekday()

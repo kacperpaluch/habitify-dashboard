@@ -175,6 +175,34 @@ class HabitLensTests(unittest.TestCase):
         self.assertEqual(app.goal_metrics(rows)["personal_best"]["value"], 15.0)
         self.assertEqual(app.coverage_metrics(rows)["coverage"], 75.0)
 
+    def test_breaking_ratio_is_capped_when_nothing_was_logged(self):
+        rows = [
+            {"date": "2026-01-01", "period": "Daily", "status": "Complete", "goal": 2.0, "quantity": 0.0, "habit_type": "Breaking", "unit": "szt"},
+            {"date": "2026-01-02", "period": "Daily", "status": "Complete", "goal": 2.0, "quantity": 2.0, "habit_type": "Breaking", "unit": "szt"},
+        ]
+        self.assertEqual(app.goal_metrics(rows)["average_ratio"], 549.5)
+
+    def test_averages_ignore_the_running_period(self):
+        self.sync(full=True)
+        detail = app.habit_detail("Błonnik", {}, today=date(2026, 8, 4))
+        # 2026-08-04 jest w trakcie (11 g), więc liczy się tylko zamknięty dzień.
+        self.assertEqual((detail["average"], detail["minimum"]), (38.0, 38.0))
+        habit = next(h for h in app.dashboard({}, today=date(2026, 8, 4))["habits"]
+                     if h["name"] == "Błonnik")
+        self.assertEqual((habit["average"], habit["latest"]), (38.0, 11.0))
+
+    def test_restore_rejects_legacy_schema_before_wiping(self):
+        self.sync(full=True)
+        legacy = Path(self.tmp.name) / "legacy-v1.db"
+        app.backup_database("manual").replace(legacy)
+        with closing(sqlite3.connect(legacy)) as conn:
+            conn.execute("PRAGMA user_version=1")
+        self.assertFalse(app.validate_database(legacy)["valid"])
+        with self.assertRaises(app.HabitifyError):
+            app.restore_database(legacy)
+        with closing(app.connect()) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM records").fetchone()[0], 4)
+
     def test_backup_restore_and_safety_copy(self):
         synced = self.sync(full=True)
         self.assertTrue(synced["backup"])

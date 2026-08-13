@@ -51,7 +51,7 @@ GET /api/dashboard
 
 `SYNC_LOCK` zapobiega równoległym synchronizacjom z przycisku i wątku automatycznego. Każdy wątek otwiera osobne połączenie SQLite.
 
-Niezależny `backup_loop` sprawdza harmonogram co minutę. Po `BACKUP_TIME` tworzy najwyżej jeden backup `scheduled` danego dnia, o ile istnieją rekordy. Kopia korzysta z online backup API SQLite i przechodzi kontrolę nagłówka, `PRAGMA integrity_check`, schematu oraz SHA-256. Restore tworzy najpierw kopię `pre-restore`; pliki są przechowywane w `/app/data/backup`.
+Niezależny `backup_loop` sprawdza harmonogram co minutę. Po `BACKUP_TIME` tworzy najwyżej jeden backup `scheduled` danego dnia, o ile istnieją rekordy. Kopia korzysta z online backup API SQLite i przechodzi kontrolę nagłówka, `PRAGMA integrity_check`, schematu, `PRAGMA user_version >= 2` oraz SHA-256. Kontrola wersji jest istotna dla restore: kończy się on `init_db()`, który przy starszym schemacie skasowałby tabele, więc taka baza musi odpaść przed podmianą, a nie po niej. Restore tworzy najpierw kopię `pre-restore`; pliki są przechowywane w `/app/data/backup`.
 
 Snapshot jest przełączany na `journal_mode=DELETE`, więc sam `.db` jest kompletnym backupem. Odczyt walidacyjny i restore używają `immutable=1`, a sidecary `-wal`/`-shm` snapshotów są sprzątane. Sidecary aktywnej bazy `/app/data/habits.db` pozostają normalnym elementem WAL.
 
@@ -118,9 +118,9 @@ Filtry dashboardu: `start`, `end`, `habit`, `list`, `period`.
 - Bieżący nieukończony dzień lub tydzień ma grace period.
 - `analytics.today` obejmuje **każdy** otwarty okres, także przy streaku 0; nawyk, który już się sypie, jest najważniejszy do pokazania. Brak rekordu na bieżący okres oznacza „nie zaplanowano" i nie trafia do `pending`.
 - Heatmapa korzysta tylko z rekordów Daily.
-- Cel `Breaking=0` nie może być dzielnikiem.
+- Cel `Breaking=0` nie może być dzielnikiem. Dla `Breaking` z limitem > 0 okres bez logów daje stosunek 999%, bo dzielenie przez zero nie ma sensownego wyniku, a sufit trzyma średnią w skali.
 - Współwystępowanie nie oznacza przyczynowości; wiarygodność od 30 wspólnych dni.
-- `inprogress` bieżącego dnia lub tygodnia jest stanem `in_progress`: nie zwiększa licznika porażek ani mianownika skuteczności, dopóki okres się nie zakończy.
+- `inprogress` bieżącego dnia lub tygodnia jest stanem `in_progress`: nie zwiększa licznika porażek ani mianownika skuteczności, dopóki okres się nie zakończy. Nie wchodzi też do `average`, `minimum` ani `maximum` — niepełna wartość zaniżałaby statystyki. `latest` celowo pokazuje bieżący okres.
 
 ## Weryfikacja
 
