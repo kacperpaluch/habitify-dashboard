@@ -2,7 +2,7 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -118,6 +118,27 @@ class HabitLensTests(unittest.TestCase):
             habit_count = conn.execute("SELECT COUNT(*) FROM habits WHERE id='fiber'").fetchone()[0]
         self.assertEqual(names, ["Błonnik pokarmowy"])
         self.assertEqual(habit_count, 1)
+
+    def test_incremental_sync_keeps_full_weeks(self):
+        # Regression: the overlap window starts mid-week, so rebuilding the week
+        # from that partial range used to wipe the days before it.
+        self.habits = [{**self.habits[1], "startDate": "2026-07-27"}]
+        days = [{"date": (date(2026, 7, 27) + timedelta(days=offset)).isoformat(),
+                 "totalLog": 3000, "status": "failed"} for offset in range(18)]
+
+        def ranged_request(path, params=None):
+            start = (params or {}).get("startDate", "0000-01-01")
+            return {"data": {**self.stats["exercise"]["data"],
+                             "dailyProgress": [d for d in days if d["date"] >= start]}}
+
+        with patch.object(app, "fetch_habits", return_value=self.habits), \
+             patch.object(app, "habitify_request", side_effect=ranged_request):
+            app.sync_habitify(full=True, today=date(2026, 8, 13))
+            app.sync_habitify(today=date(2026, 8, 13))
+        with closing(app.connect()) as conn:
+            weeks = {row["date"]: row["quantity"]
+                     for row in conn.execute("SELECT date,quantity FROM records ORDER BY date")}
+        self.assertEqual(weeks, {"2026-07-27": 350.0, "2026-08-03": 350.0, "2026-08-10": 200.0})
 
     def test_legacy_schema_is_discarded(self):
         legacy_path = Path(self.tmp.name) / "legacy.db"

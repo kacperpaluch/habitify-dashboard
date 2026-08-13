@@ -89,7 +89,7 @@ Dla mierzalnego Breaking z niezerowym limitem backend porównuje wartość z cel
 
 ## Synchronizacja
 
-Pierwszy sync pobiera `habit.startDate..today`. Sync przyrostowy zaczyna od ostatniej daty minus `SYNC_OVERLAP_DAYS`. `full=1` pobiera pełny zakres.
+Pierwszy sync pobiera `habit.startDate..today`. Sync przyrostowy zaczyna od ostatniej daty minus `SYNC_OVERLAP_DAYS`. `full=1` pobiera pełny zakres. Data startu jest dosuwana do początku okresu (`period_key`), bo rekord tygodniowy jest nadpisywany w całości — start w środku tygodnia przeliczyłby go z niepełnego zakresu i zaniżył sumę.
 
 Sieć jest odpytywana przed transakcją zapisu. Dopiero komplet poprawnych odpowiedzi jest zapisywany atomowo. Błąd pozostawia poprzedni snapshot i tworzy `sync_runs.status=failed`. Nawyki nieobecne w pełnej liście active+archived są usuwane lokalnie przez `ON DELETE CASCADE`.
 

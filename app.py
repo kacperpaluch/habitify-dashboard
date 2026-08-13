@@ -530,6 +530,9 @@ def sync_habitify(full: bool = False, today: date | None = None) -> dict:
             if not full and last_dates.get(habit["id"]):
                 overlap_start = date.fromisoformat(last_dates[habit["id"]]) - timedelta(days=SYNC_OVERLAP_DAYS)
                 start = max(start, overlap_start)
+            # Weekly records are rewritten whole periods at a time, so a mid-week
+            # start would rebuild that week from a partial range and undercount it.
+            start = period_key(start, habit["period"])
             stats = habitify_request(f"habits/{habit['id']}/statistics", {
                 "startDate": start.isoformat(), "endDate": sync_day.isoformat(),
             })
