@@ -183,13 +183,16 @@ class HabitLensTests(unittest.TestCase):
         self.assertEqual(app.goal_metrics(rows)["average_ratio"], 549.5)
 
     def test_averages_ignore_the_running_period(self):
+        # Bieżący dzień ma już zaliczony cel (30 g > 25 g), a mimo to jego
+        # niepełna wartość nie może wchodzić do średniej ani minimum.
+        self.stats["fiber"]["data"]["dailyProgress"][1].update(totalLog=0.030, status="completed")
         self.sync(full=True)
         detail = app.habit_detail("Błonnik", {}, today=date(2026, 8, 4))
-        # 2026-08-04 jest w trakcie (11 g), więc liczy się tylko zamknięty dzień.
+        self.assertEqual(detail["records"][-1]["state"], "complete")
         self.assertEqual((detail["average"], detail["minimum"]), (38.0, 38.0))
         habit = next(h for h in app.dashboard({}, today=date(2026, 8, 4))["habits"]
                      if h["name"] == "Błonnik")
-        self.assertEqual((habit["average"], habit["latest"]), (38.0, 11.0))
+        self.assertEqual((habit["average"], habit["latest"]), (38.0, 30.0))
 
     def test_restore_rejects_legacy_schema_before_wiping(self):
         self.sync(full=True)

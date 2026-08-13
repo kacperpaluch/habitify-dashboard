@@ -120,7 +120,7 @@ Filtry dashboardu: `start`, `end`, `habit`, `list`, `period`.
 - Heatmapa korzysta tylko z rekordów Daily.
 - Cel `Breaking=0` nie może być dzielnikiem. Dla `Breaking` z limitem > 0 okres bez logów daje stosunek 999%, bo dzielenie przez zero nie ma sensownego wyniku, a sufit trzyma średnią w skali.
 - Współwystępowanie nie oznacza przyczynowości; wiarygodność od 30 wspólnych dni.
-- `inprogress` bieżącego dnia lub tygodnia jest stanem `in_progress`: nie zwiększa licznika porażek ani mianownika skuteczności, dopóki okres się nie zakończy. Nie wchodzi też do `average`, `minimum` ani `maximum` — niepełna wartość zaniżałaby statystyki. `latest` celowo pokazuje bieżący okres.
+- `inprogress` bieżącego dnia lub tygodnia jest stanem `in_progress`: nie zwiększa licznika porażek ani mianownika skuteczności, dopóki okres się nie zakończy. Osobno `is_running` odpowiada na pytanie, czy okres jeszcze trwa, niezależnie od statusu: `average`, `minimum` i `maximum` pomijają trwający okres także wtedy, gdy cel już w nim padł, bo suma dalej rośnie. `latest` celowo pokazuje bieżący okres.
 
 ## Weryfikacja
 

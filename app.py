@@ -629,11 +629,15 @@ def period_key(day: date, period: str) -> date:
     return day
 
 
+def is_running(row: dict | sqlite3.Row, today: date) -> bool:
+    """Czy rekord opisuje okres, który jeszcze trwa — niezależnie od statusu."""
+    return row["date"] == period_key(today, row["period"]).isoformat()
+
+
 def record_state(row: dict | sqlite3.Row, today: date) -> str:
     if is_complete(row):
         return "complete"
-    current_period = period_key(today, row["period"]).isoformat()
-    return "in_progress" if row["date"] == current_period else "missed"
+    return "in_progress" if is_running(row, today) else "missed"
 
 
 def streaks(rows: list[dict], today: date) -> tuple[int, int, str]:
@@ -978,8 +982,9 @@ def dashboard(params: dict[str, list[str]], today: date | None = None) -> dict:
         done = sum(is_complete(r) for r in items)
         missed = sum(record_state(r, today) == "missed" for r in items)
         in_progress = sum(record_state(r, today) == "in_progress" for r in items)
-        # Trwający okres ma z definicji niepełną wartość — w średniej zaniżałby wynik.
-        quantities = [r["quantity"] for r in items if record_state(r, today) != "in_progress"]
+        # Trwający okres ma z definicji niepełną wartość — także wtedy, gdy cel
+        # już padł, więc liczy się koniec okresu, nie jego status.
+        quantities = [r["quantity"] for r in items if not is_running(r, today)]
         habit_stats.append({
             "name": name, "period": items[0]["period"], "type": items[0]["habit_type"],
             "unit": items[0]["unit"], "goal": items[-1]["goal"],
@@ -1039,7 +1044,7 @@ def habit_detail(name: str, params: dict[str, list[str]], today: date | None = N
     done = sum(is_complete(r) for r in rows)
     missed = sum(record_state(r, today) == "missed" for r in rows)
     in_progress = sum(record_state(r, today) == "in_progress" for r in rows)
-    quantities = [r["quantity"] for r in rows if record_state(r, today) != "in_progress"]
+    quantities = [r["quantity"] for r in rows if not is_running(r, today)]
     weekday = defaultdict(lambda: [0, 0])
     for row in rows:
         idx = date.fromisoformat(row["date"]).weekday()
