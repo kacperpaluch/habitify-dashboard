@@ -7,7 +7,6 @@
   --line: #dcddd7;
   --green: #355f4b;
   --green-dark: #244737;
-  --lime: #cadd88;
   --orange: #d78b58;
   --red: #bd6557;
   --pending: #c59044;
@@ -81,7 +80,6 @@ h1 em { color: var(--green); font-weight: 400; }
 .panel-heading.compact { align-items: center; }
 .panel h2, .dialog h2 { margin: 0; font-family: Georgia, serif; font-size: 26px; font-weight: 400; letter-spacing: -.025em; }
 .panel-note { color: var(--muted); font-size: 10px; }
-.panel-note.block { display: block; margin: 12px 0 18px; line-height: 1.5; }
 .trend-canvas { display: block; width: 100%; height: 250px; margin-top: 12px; }
 .chart-legend { display: flex; justify-content: flex-end; gap: 16px; margin-top: 20px; color: var(--muted); font-size: 10px; }
 .chart-legend span { display: flex; align-items: center; gap: 6px; }
@@ -169,10 +167,6 @@ footer { display: flex; justify-content: space-between; padding: 28px 2px 42px; 
 .dialog::backdrop { background: rgba(27,31,27,.42); backdrop-filter: blur(4px); }
 .dialog-close { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #e9e9e3; font-size: 22px; }
 .dialog-intro { margin: 15px 36px 26px 0; color: var(--muted); line-height: 1.55; font-size: 13px; }
-.field-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 11px; }
-.copy-field { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: white; }
-.copy-field code { padding: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
-.copy-field button { align-self: stretch; padding: 0 14px; border: 0; border-left: 1px solid var(--line); color: var(--green); background: transparent; }
 .hint { margin: 9px 0 0; color: var(--muted); font-size: 10px; }
 .settings-actions { margin: 24px 0; }
 .imports { border-top: 1px solid var(--line); padding-top: 22px; }
@@ -185,7 +179,6 @@ footer { display: flex; justify-content: space-between; padding: 28px 2px 42px; 
 .backup-status { padding: 12px 14px; border: 1px solid #c9d7c9; border-radius: 10px; background: #edf3ec; }
 .backup-status strong, .backup-status small { display: block; }
 .backup-status strong { font-size: 11px; }.backup-status small { margin-top: 4px; color: var(--muted); font-size: 9px; }
-.backup-list { margin-top: 10px; max-height: 230px; overflow: auto; }
 .backup-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--line); }
 .backup-row strong, .backup-row small { display: block; }.backup-row strong { font-size: 10px; }.backup-row small { margin-top: 4px; color: var(--muted); font-size: 9px; }
 .backup-row > span:last-child { display: flex; gap: 10px; }.backup-row a, .backup-row button { padding: 0; border: 0; background: none; color: var(--green); font-size: 10px; text-decoration: none; }.backup-row button { color: #8a632c; }
@@ -296,7 +289,7 @@ footer { display: flex; justify-content: space-between; padding: 28px 2px 42px; 
   .today-row.pending .stake { background: #3b301c; color: var(--pending); }
   .metric-card.pending { border-color: #4a3c25; background: #221d16; }
   .metric-card.pending strong, .pending-count, .detail-record.in_progress { color: var(--pending); }
-  select, .copy-field, .history-filters input { background: #212520; color: var(--ink); }
+  select, .history-filters input { background: #212520; color: var(--ink); }
   .heat-cell, .legend i { background: #262a23; }
   .heat-cell[data-level="1"], .legend .l1 { background: #2f4c39; }
   .heat-cell[data-level="2"], .legend .l2 { background: #3f6a4e; }

@@ -143,7 +143,6 @@ function renderAnalytics(analytics) {
   renderMonthly(analytics.monthly);
   renderHabitInsights(analytics);
   renderRecords(analytics.goal_metrics);
-  renderCorrelations(analytics.correlations);
   renderQuality(analytics.data_quality);
 }
 
@@ -170,9 +169,9 @@ function renderHabitInsights(analytics) {
     value: signed(analytics.most_regressed.delta), reliable: analytics.most_regressed.reliable,
   });
   const best = [...analytics.behaviors].filter((x) => x.median_recovery !== null).sort((a, b) => a.median_recovery - b.median_recovery)[0];
-  if (best) items.push({ title: "Najszybszy powrót", name: best.name, value: `${fmtNumber.format(best.median_recovery)} okresu`, reliable: best.recoveries >= 3 });
+  if (best) items.push({ title: "Najszybszy powrót", name: best.name, value: `${fmtNumber.format(best.median_recovery)} ${plural(Math.round(best.median_recovery), "okres", "okresy", "okresów")}`, reliable: best.recoveries >= 3 });
   const longest = [...analytics.behaviors].sort((a, b) => b.longest_break - a.longest_break)[0];
-  if (longest) items.push({ title: "Najdłuższa przerwa", name: longest.name, value: `${longest.longest_break} okresów`, reliable: true });
+  if (longest) items.push({ title: "Najdłuższa przerwa", name: longest.name, value: `${longest.longest_break} ${plural(longest.longest_break, "okres", "okresy", "okresów")}`, reliable: true });
   $("#habitInsights").innerHTML = items.length ? items.map((item) => `
     <div class="insight-item"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.name)}${item.reliable ? "" : " · mała próba"}</small></span><span class="insight-value ${String(item.value).startsWith("+") ? "positive" : String(item.value).startsWith("-") ? "negative" : ""}">${escapeHtml(item.value)}</span></div>`).join("") : "<p class='hint'>Potrzeba danych z co najmniej dwóch okresów porównawczych.</p>";
 }
@@ -214,13 +213,6 @@ function renderRecords(items) {
       : `${item.zero_goal_successes} okresów bez naruszenia · ${item.zero_goal_violations} naruszeń`;
     return `<article class="record-card"><span>${escapeHtml(item.name)}</span><strong>${fmtNumber.format(record.value)} ${escapeHtml(record.unit)}</strong><small>Rekord: ${record.date}<br>${escapeHtml(targetText)}</small></article>`;
   }).join("") : "<p class='hint'>Brak wartości ilościowych w wybranym okresie.</p>";
-}
-
-function renderCorrelations(items) {
-  $("#correlationList").innerHTML = items.length ? items.slice(0, 6).map((item) => {
-    const score = item.correlation === null ? "—" : signed(item.correlation * 100, "");
-    return `<div class="insight-item"><span><strong>${escapeHtml(item.first)} + ${escapeHtml(item.second)}</strong><small>${item.observations} wspólnych dni · razem wykonane ${fmtNumber.format(item.both_complete)}%${item.reliable ? "" : " · zbieram dane"}</small></span><span class="insight-value">${score}</span></div>`;
-  }).join("") : "<p class='hint'>Potrzeba co najmniej dwóch nawyków dziennych ze wspólnymi datami.</p>";
 }
 
 function renderQuality(quality) {

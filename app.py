@@ -804,36 +804,6 @@ def coverage_metrics(rows: list[dict]) -> dict:
     }
 
 
-def correlations(rows: list[dict]) -> list[dict]:
-    by_habit: dict[str, dict[str, bool]] = defaultdict(dict)
-    for row in rows:
-        if row["period"].lower() == "daily":
-            by_habit[row["name"]][row["date"]] = is_complete(row)
-    names = sorted(by_habit)
-    result = []
-    for i, first in enumerate(names):
-        for second in names[i + 1:]:
-            shared = sorted(set(by_habit[first]) & set(by_habit[second]))
-            if not shared:
-                continue
-            a = [by_habit[first][d] for d in shared]
-            b = [by_habit[second][d] for d in shared]
-            n11 = sum(x and y for x, y in zip(a, b))
-            n10 = sum(x and not y for x, y in zip(a, b))
-            n01 = sum(not x and y for x, y in zip(a, b))
-            n00 = len(shared) - n11 - n10 - n01
-            denominator = ((n11+n10)*(n01+n00)*(n11+n01)*(n10+n00)) ** 0.5
-            phi = (n11*n00 - n10*n01) / denominator if denominator else None
-            result.append({
-                "first": first, "second": second, "observations": len(shared),
-                "both_complete": round(n11 / len(shared) * 100, 1),
-                "agreement": round((n11+n00) / len(shared) * 100, 1),
-                "correlation": round(phi, 3) if phi is not None else None,
-                "reliable": len(shared) >= 30,
-            })
-    return sorted(result, key=lambda x: (not x["reliable"], -(abs(x["correlation"]) if x["correlation"] is not None else 0), -x["observations"]))[:12]
-
-
 def extended_analytics(rows: list[dict], previous_rows: list[dict], all_by_name: dict[str, list[dict]], today: date) -> dict:
     current_rate, previous_rate = rate_of(rows, today), rate_of(previous_rows, today)
     daily_series = period_series(rows, "Daily", today)
@@ -950,7 +920,6 @@ def extended_analytics(rows: list[dict], previous_rows: list[dict], all_by_name:
         "habit_changes": changes, "most_improved": improved, "most_regressed": regressed,
         "lists": lists, "monthly": monthly, "behaviors": behaviors,
         "goal_metrics": records_data,
-        "correlations": correlations([row for row in rows if record_state(row, today) != "in_progress"]),
         "today": {"date": today.isoformat(), "done": today_done,
                   "total": today_total, "pending": pending},
         "data_quality": {"latest_sync": dict(latest_sync) if latest_sync else None,

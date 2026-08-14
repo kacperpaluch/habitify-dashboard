@@ -122,6 +122,10 @@ Filtry dashboardu: `start`, `end`, `habit`, `list`, `period`.
 - Współwystępowanie nie oznacza przyczynowości; wiarygodność od 30 wspólnych dni.
 - `inprogress` bieżącego dnia lub tygodnia jest stanem `in_progress`: nie zwiększa licznika porażek ani mianownika skuteczności, dopóki okres się nie zakończy. Osobno `is_running` odpowiada na pytanie, czy okres jeszcze trwa, niezależnie od statusu: `average`, `minimum` i `maximum` pomijają trwający okres także wtedy, gdy cel już w nim padł, bo suma dalej rośnie. `latest` celowo pokazuje bieżący okres.
 
+## Świadome braki
+
+Sekcja współwystępowania nawyków (współczynnik phi par nawyków dziennych) została usunięta i nie należy jej przywracać: przy danych jednej osoby korelacja nie jest przesłanką, na której da się oprzeć decyzję, a interfejs musiał sam ostrzegać, że to nie przyczynowość. Sekcja jakości danych zostaje, bo tutaj luka w pokryciu oznacza realny problem z synchronizacją przyrostową — w bliźniaczym Awesome Habits Lens, gdzie import jest snapshotem CSV, jej odpowiednik celowo nie istnieje.
+
 ## Frontend
 
 Breakpointy 900 px i 620 px. Poniżej 620 px tabela nawyków renderuje się jako karty — `renderHabits` daje każdej `td` atrybut `data-label`, a CSS zamienia komórki na wiersze etykieta/wartość, więc nie ma osobnego szablonu dla telefonu. Tryb ciemny to warstwa nadpisań `@media (prefers-color-scheme: dark)` na końcu `styles.css`; oba wykresy czytają kolory z custom properties, dlatego zmiana motywu wymusza ponowny `render`. Poniżej 520 px szerokości canvasu trend rysuje wyłącznie średnie kroczące, a serie są decymowane do ~1,5 punktu na piksel; wykres szczegółu pomija kropki, gdy przypadałoby mniej niż 4 px na punkt. Canvas ma wymiary w pikselach, więc `resize` przerysowuje widok — ale tylko przy zmianie szerokości, bo na mobile chowanie paska adresu zmienia samą wysokość. Dane pochodzą z `state.data`, więc przerysowanie nie odpytuje API.
