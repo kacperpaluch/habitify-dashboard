@@ -154,7 +154,7 @@ function renderBars(selector, items) {
 function renderMonthly(items) {
   $("#monthlyGrid").innerHTML = items.length ? items.map((item) => {
     const [year, month] = item.month.split("-").map(Number);
-    return `<article class="month-card"><span>${months[month - 1]} ${year}</span><strong>${item.rate === null ? "—" : `${fmtNumber.format(item.rate)}%`}</strong><small>${item.perfect_days} idealnych dni · ${item.records} zapisów</small><div class="mini-progress"><i style="width:${item.rate || 0}%"></i></div></article>`;
+    return `<article class="month-card"><span>${months[month - 1]} ${year}</span><strong>${item.rate === null ? "—" : `${fmtNumber.format(item.rate)}%`}</strong><small>${item.perfect_days} ${plural(item.perfect_days, "idealny dzień", "idealne dni", "idealnych dni")} · ${item.records} ${plural(item.records, "zapis", "zapisy", "zapisów")}</small><div class="mini-progress"><i style="width:${item.rate || 0}%"></i></div></article>`;
   }).join("") : "<p class='hint'>Brak miesięcy z danymi dziennymi.</p>";
 }
 
