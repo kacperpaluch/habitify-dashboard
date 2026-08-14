@@ -15,6 +15,7 @@ Self-hostowany dashboard analityczny dla danych z Habitify. Habitify jest jedyny
 - codzienny backup o wybranej godzinie, kopia na żądanie i bezpieczne przywracanie,
 - paginowana historia synchronizacji i backupów z filtrem zakresu dat,
 - reszta analityki zwinięta w sekcji „Analiza historyczna",
+- interfejs dopasowany do telefonu: karty zamiast tabeli, tryb ciemny według ustawień systemu, instalacja jako aplikacja (PWA),
 - stabilne identyfikatory Habitify — zmiana nazwy nie rozdziela historii,
 - brak zależności runtime poza biblioteką standardową Pythona.
 

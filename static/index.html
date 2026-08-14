@@ -3,10 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f2ed">
+  <meta name="theme-color" content="#f4f2ed" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#161814" media="(prefers-color-scheme: dark)">
   <title>Habit Lens — Habitify Analytics</title>
   <meta name="description" content="Minimalistyczne statystyki i wizualizacje danych z Habitify.">
-  <link rel="stylesheet" href="/styles.css?v=3">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Habit Lens">
+  <link rel="stylesheet" href="/styles.css?v=4">
 </head>
 <body>
   <div class="app-shell">
@@ -215,6 +221,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=4" defer></script>
+  <script src="/app.js?v=5" defer></script>
 </body>
 </html>

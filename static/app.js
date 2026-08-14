@@ -242,14 +242,19 @@ function renderTrend(points) {
     canvas.width = Math.max(1, rect.width * dpr); canvas.height = Math.max(1, rect.height * dpr);
     const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
     const w = rect.width, h = rect.height, left = 34, right = 14, top = 15, bottom = 24;
-    const x = (i) => left + (points.length <= 1 ? (w-left-right)/2 : i/(points.length-1)*(w-left-right));
+    const theme = getComputedStyle(document.documentElement), token = (name) => theme.getPropertyValue(name).trim();
+    const narrow = w < 520; // na telefonie surowy wynik i kropki to sama gęstwina, zostają średnie
+    const step = Math.max(1, Math.ceil(points.length / (w * 1.5))); // najwyżej ~1,5 punktu na piksel
+    const data = step > 1 ? points.filter((p, i) => i % step === 0) : points;
+    const x = (i) => left + (data.length <= 1 ? (w-left-right)/2 : i/(data.length-1)*(w-left-right));
     const y = (v) => top + (100-v)/100*(h-top-bottom);
-    ctx.font = "9px sans-serif"; ctx.fillStyle = "#73776f"; ctx.strokeStyle = "#dcddd7"; ctx.lineWidth = 1;
+    ctx.font = "9px sans-serif"; ctx.fillStyle = token("--muted"); ctx.strokeStyle = token("--line"); ctx.lineWidth = 1;
     [0, 25, 50, 75, 100].forEach((v) => { ctx.beginPath(); ctx.moveTo(left, y(v)); ctx.lineTo(w-right, y(v)); ctx.stroke(); ctx.fillText(`${v}%`, 4, y(v)+3); });
-    const line = (key, color, width) => { ctx.beginPath(); points.forEach((p, i) => i ? ctx.lineTo(x(i), y(p[key])) : ctx.moveTo(x(i), y(p[key]))); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineJoin = "round"; ctx.stroke(); };
-    line("rate", "#b8bcb4", 1); line("avg30", "#d78b58", 2); line("avg7", "#355f4b", 2.5);
-    points.forEach((p, i) => { ctx.beginPath(); ctx.arc(x(i), y(p.rate), 2.5, 0, Math.PI*2); ctx.fillStyle = "#355f4b"; ctx.fill(); });
-    ctx.fillStyle = "#73776f"; ctx.fillText(points[0].date, left, h-5); if (points.length > 1) { const label = points.at(-1).date; ctx.fillText(label, w-right-ctx.measureText(label).width, h-5); }
+    const line = (key, color, width) => { ctx.beginPath(); data.forEach((p, i) => i ? ctx.lineTo(x(i), y(p[key])) : ctx.moveTo(x(i), y(p[key]))); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineJoin = "round"; ctx.stroke(); };
+    if (!narrow) line("rate", token("--dot-raw"), 1);
+    line("avg30", token("--orange"), 2); line("avg7", token("--green"), 2.5);
+    if (!narrow) data.forEach((p, i) => { ctx.beginPath(); ctx.arc(x(i), y(p.rate), 2.5, 0, Math.PI*2); ctx.fillStyle = token("--green"); ctx.fill(); });
+    ctx.fillStyle = token("--muted"); ctx.fillText(data[0].date, left, h-5); if (data.length > 1) { const label = data.at(-1).date; ctx.fillText(label, w-right-ctx.measureText(label).width, h-5); }
   });
 }
 
@@ -317,12 +322,12 @@ function renderHabits(habits) {
     const average = habit.unit ? `${fmtNumber.format(habit.average)} ${escapeHtml(habit.unit)}` : fmtNumber.format(habit.average);
     const hasRate = habit.rate !== null;
     return `<tr>
-      <td><div class="habit-name"><span class="habit-dot">${escapeHtml(habit.name[0] || "H")}</span><span><strong>${escapeHtml(habit.name)}</strong><small>${escapeHtml(habit.list || habit.type)} · ${escapeHtml(habit.period)}</small></span></div></td>
+      <td class="habit-cell"><div class="habit-name"><span class="habit-dot">${escapeHtml(habit.name[0] || "H")}</span><span><strong>${escapeHtml(habit.name)}</strong><small>${escapeHtml(habit.list || habit.type)} · ${escapeHtml(habit.period)}</small></span></div></td>
       <td class="rate-cell"><div class="rate-top"><strong>${hasRate ? `${fmtNumber.format(habit.rate)}%` : "—"}</strong><span>${hasRate ? (habit.rate >= 80 ? "dobry rytm" : "do poprawy") : "brak zamkniętych"}</span></div><div class="progress"><i style="width:${habit.rate || 0}%"></i></div></td>
-      <td class="positive">${habit.done}</td><td class="${habit.missed ? "negative" : ""}">${habit.missed}</td>
-      <td class="pending-count">${habit.in_progress || "—"}</td>
-      <td><strong>${habit.current_streak}</strong> ${unit}<br><small>rekord ${habit.longest_streak}</small></td>
-      <td>${average}</td>
+      <td class="positive" data-label="Wykonane">${habit.done}</td><td class="${habit.missed ? "negative" : ""}" data-label="Niewykonane">${habit.missed}</td>
+      <td class="pending-count" data-label="W trakcie">${habit.in_progress || "—"}</td>
+      <td data-label="Streak"><strong>${habit.current_streak}</strong> ${unit}<br><small>rekord ${habit.longest_streak}</small></td>
+      <td data-label="Średnia">${average}</td>
       <td><button class="row-open" data-habit="${encodeURIComponent(habit.name)}" aria-label="Otwórz ${escapeHtml(habit.name)}">›</button></td>
     </tr>`;
   }).join("");
@@ -357,19 +362,21 @@ function drawChart(detail) {
   const ctx = canvas.getContext("2d");
   ctx.scale(dpr, dpr);
   const w = rect.width, h = rect.height, p = 26;
+  const theme = getComputedStyle(document.documentElement), token = (name) => theme.getPropertyValue(name).trim();
   const values = detail.records.map((r) => r.quantity);
   const max = Math.max(detail.goal, ...values, 1) * 1.12;
   const x = (i) => p + (values.length <= 1 ? (w - p * 2) / 2 : i / (values.length - 1) * (w - p * 2));
   const y = (v) => h - p - v / max * (h - p * 2);
-  ctx.strokeStyle = "#d7d9d2"; ctx.lineWidth = 1;
+  ctx.strokeStyle = token("--line"); ctx.lineWidth = 1;
   [0, .5, 1].forEach((r) => { ctx.beginPath(); ctx.moveTo(p, p + r * (h - p * 2)); ctx.lineTo(w - p, p + r * (h - p * 2)); ctx.stroke(); });
-  ctx.setLineDash([5, 5]); ctx.strokeStyle = "#d78b58"; ctx.beginPath(); ctx.moveTo(p, y(detail.goal)); ctx.lineTo(w - p, y(detail.goal)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.setLineDash([5, 5]); ctx.strokeStyle = token("--orange"); ctx.beginPath(); ctx.moveTo(p, y(detail.goal)); ctx.lineTo(w - p, y(detail.goal)); ctx.stroke(); ctx.setLineDash([]);
   if (values.length) {
-    ctx.strokeStyle = "#355f4b"; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
+    ctx.strokeStyle = token("--green"); ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
     values.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))); ctx.stroke();
-    values.forEach((v, i) => { ctx.beginPath(); ctx.fillStyle = detail.records[i].state === "complete" ? "#355f4b" : detail.records[i].state === "in_progress" ? "#c59044" : "#bd6557"; ctx.arc(x(i), y(v), 3, 0, Math.PI * 2); ctx.fill(); });
+    const dots = values.length <= (w - p * 2) / 4; // przy gęstych danych same linie czytają się lepiej
+    if (dots) values.forEach((v, i) => { ctx.beginPath(); ctx.fillStyle = detail.records[i].state === "complete" ? token("--green") : detail.records[i].state === "in_progress" ? token("--pending") : token("--red"); ctx.arc(x(i), y(v), 3, 0, Math.PI * 2); ctx.fill(); });
   }
-  ctx.fillStyle = "#73776f"; ctx.font = "10px sans-serif"; ctx.fillText(`cel ${fmtNumber.format(detail.goal)}`, p + 4, Math.max(10, y(detail.goal) - 6));
+  ctx.fillStyle = token("--muted"); ctx.font = "10px sans-serif"; ctx.fillText(`cel ${fmtNumber.format(detail.goal)}`, p + 4, Math.max(10, y(detail.goal) - 6));
 }
 
 async function syncHabitify(full = false) {
@@ -520,5 +527,23 @@ $("#clearFilters").addEventListener("click", () => {
   $("#habitFilter").value = $("#listFilter").value = $("#periodFilter").value = "";
   load();
 });
+
+// dotyk nie pokazuje title, więc opis komórki trafia do toastu
+$("#heatmap").addEventListener("click", (event) => {
+  const cell = event.target.closest(".heat-cell");
+  if (cell) toast(cell.title);
+});
+
+// canvas ma stałą szerokość w pikselach, więc obrót telefonu wymaga przerysowania;
+// zmiana samej wysokości (pasek adresu na mobile) nic nie zmienia
+let lastWidth = window.innerWidth;
+const redraw = () => state.data && render(state.data);
+window.addEventListener("resize", () => {
+  if (window.innerWidth === lastWidth) return;
+  lastWidth = window.innerWidth;
+  clearTimeout(window.chartTimer);
+  window.chartTimer = setTimeout(redraw, 150);
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw);
 
 load(true);
